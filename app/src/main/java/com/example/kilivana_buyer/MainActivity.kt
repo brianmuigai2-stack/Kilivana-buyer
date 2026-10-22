@@ -47,7 +47,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        WindowCompat.getInsetsController(window, window.decorView).isAppearanceLightStatusBars = false
+        WindowCompat.getInsetsController(window, window.decorView).isAppearanceLightStatusBars = true
         setContent { KilivanabuyerTheme { KilivanaApp() } }
     }
 }
@@ -63,18 +63,22 @@ fun KilivanaApp(
     val signedIn by auth.loggedIn.collectAsState()
     val backStack by nav.currentBackStackEntryAsState()
     val route = backStack?.destination?.route
+    val selectedTabRoute = when {
+        route?.startsWith("products") == true -> "products"
+        else -> route
+    }
     val tabs = listOf("home", "products", "cart", "orders", "dashboard")
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     Scaffold(
-        containerColor = Green600,
+        containerColor = NeutralBackground,
         snackbarHost = { SnackbarHost(snackbar) },
         bottomBar = {
-            if (route in tabs) NavigationBar(containerColor = NeutralSurface) {
+            if (selectedTabRoute in tabs) NavigationBar(containerColor = NeutralSurface) {
                 val entries = listOf(Triple("home", "Home", Icons.Default.Home), Triple("products", "Products", Icons.Default.Storefront), Triple("cart", "Cart", Icons.Default.ShoppingCart), Triple("orders", "Orders", Icons.AutoMirrored.Filled.ReceiptLong), Triple("dashboard", "Account", Icons.Default.Person))
                 entries.forEach { (destination, label, icon) ->
                     NavigationBarItem(
-                        selected = route == destination,
+                        selected = selectedTabRoute == destination,
                         onClick = { nav.navigate(destination) { popUpTo(nav.graph.startDestinationId) { saveState = true }; launchSingleTop = true; restoreState = true } },
                         icon = { BadgedBox(badge = { if (destination == "cart" && items.sumOf { it.quantity } > 0) Badge { Text(items.sumOf { it.quantity }.toString()) } }) { Icon(icon, label) } },
                         label = { Text(label) }
