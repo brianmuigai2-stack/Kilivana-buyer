@@ -1,218 +1,115 @@
 package com.example.kilivana_buyer
 
-import android.graphics.Color
 import android.os.Bundle
+import android.net.Uri
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.Store
-import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.ShoppingCart
-import androidx.compose.material.icons.filled.ReceiptLong
-import androidx.compose.material3.Icon
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.MutableState
-import androidx.compose.runtime.mutableStateListOf
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.core.view.WindowCompat
-import androidx.navigation.NavHostController
-import androidx.navigation.compose.NavHost
-import androidx.navigation.compose.composable
-import androidx.navigation.compose.currentBackStackEntryAsState
-import androidx.navigation.compose.rememberNavController
-import com.example.kilivana_buyer.ui.screens.CartItemsState
-import com.example.kilivana_buyer.ui.screens.CartScreen
-import com.example.kilivana_buyer.ui.screens.CartItem
-import com.example.kilivana_buyer.ui.screens.DashboardScreen
-import com.example.kilivana_buyer.ui.screens.LoginScreen
-import com.example.kilivana_buyer.ui.screens.OrdersScreen
-import com.example.kilivana_buyer.ui.screens.OrdersState
-import com.example.kilivana_buyer.ui.screens.Order
-import com.example.kilivana_buyer.ui.screens.ProductsScreen
-import com.example.kilivana_buyer.ui.screens.HomeScreen
-import com.example.kilivana_buyer.ui.screens.SignupScreen
-import com.example.kilivana_buyer.ui.screens.SplashScreen
-import com.example.kilivana_buyer.ui.theme.KilivanabuyerTheme
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.*
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ReceiptLong
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.dp
+import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.navigation.NavType
+import androidx.navigation.compose.*
+import androidx.navigation.navArgument
+import com.example.kilivana_buyer.data.*
+import com.example.kilivana_buyer.model.*
+import com.example.kilivana_buyer.ui.theme.*
+import com.example.kilivana_buyer.ui.screens.*
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        window.statusBarColor = Color.parseColor("#2E7D32")
         WindowCompat.getInsetsController(window, window.decorView).isAppearanceLightStatusBars = false
-        setContent {
-            KilivanabuyerTheme {
-                val navController = rememberNavController()
-                val cartItems: MutableState<List<CartItem>> = CartItemsState
-                val orders: MutableState<List<Order>> = OrdersState
-                val isLoggedIn = mutableStateOf(false)
-                MainApp(navController, cartItems, orders, isLoggedIn)
-            }
-        }
+        setContent { KilivanabuyerTheme { KilivanaApp() } }
     }
 }
 
 @Composable
-fun MainApp(
-    navController: NavHostController,
-    cartItems: MutableState<List<CartItem>>,
-    orders: MutableState<List<Order>>,
-    isLoggedIn: MutableState<Boolean>
+fun KilivanaApp(
+    cart: CartViewModel = viewModel(), productsVm: ProductsViewModel = viewModel(),
+    ordersVm: OrdersViewModel = viewModel(), auth: AuthViewModel = viewModel()
 ) {
-    val backStack = navController.currentBackStackEntryAsState()
-    val currentRoute = backStack.value?.destination?.route
-    val showBottom = currentRoute in listOf("home", "products", "cart", "orders", "dashboard")
+    val nav = rememberNavController()
+    val items by cart.items.collectAsState()
+    val orders by ordersVm.orders.collectAsState()
+    val signedIn by auth.loggedIn.collectAsState()
+    val backStack by nav.currentBackStackEntryAsState()
+    val route = backStack?.destination?.route
+    val tabs = listOf("home", "products", "cart", "orders", "dashboard")
+    val snackbar = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
     Scaffold(
-        modifier = Modifier.fillMaxSize(),
+        containerColor = Green600,
+        snackbarHost = { SnackbarHost(snackbar) },
         bottomBar = {
-            if (showBottom) {
-                NavigationBar {
+            if (route in tabs) NavigationBar(containerColor = NeutralSurface) {
+                val entries = listOf(Triple("home", "Home", Icons.Default.Home), Triple("products", "Products", Icons.Default.Storefront), Triple("cart", "Cart", Icons.Default.ShoppingCart), Triple("orders", "Orders", Icons.AutoMirrored.Filled.ReceiptLong), Triple("dashboard", "Account", Icons.Default.Person))
+                entries.forEach { (destination, label, icon) ->
                     NavigationBarItem(
-                        selected = currentRoute == "home",
-                        onClick = { navController.navigate("home") { popUpTo("home") { inclusive = true } } },
-                        icon = { Icon(Icons.Default.Home, contentDescription = "Home") },
-                        label = { Text("Home") }
-                    )
-                    NavigationBarItem(
-                        selected = currentRoute == "products",
-                        onClick = { navController.navigate("home") { popUpTo("products") { inclusive = true } } },
-                        icon = { Icon(Icons.Default.Store, contentDescription = "Products") },
-                        label = { Text("Products") }
-                    )
-                    NavigationBarItem(
-                        selected = currentRoute == "cart",
-                        onClick = { navController.navigate("cart") },
-                        icon = { Icon(Icons.Default.ShoppingCart, contentDescription = "Cart") },
-                        label = { Text("Cart") }
-                    )
-                    NavigationBarItem(
-                        selected = currentRoute == "orders",
-                        onClick = { navController.navigate("orders") },
-                        icon = { Icon(Icons.Default.ReceiptLong, contentDescription = "Orders") },
-                        label = { Text("Orders") }
-                    )
-                    NavigationBarItem(
-                        selected = currentRoute == "dashboard",
-                        onClick = { navController.navigate("dashboard") },
-                        icon = { Icon(Icons.Default.Person, contentDescription = "Dashboard") },
-                        label = { Text("Account") }
+                        selected = route == destination,
+                        onClick = { nav.navigate(destination) { popUpTo(nav.graph.startDestinationId) { saveState = true }; launchSingleTop = true; restoreState = true } },
+                        icon = { BadgedBox(badge = { if (destination == "cart" && items.sumOf { it.quantity } > 0) Badge { Text(items.sumOf { it.quantity }.toString()) } }) { Icon(icon, label) } },
+                        label = { Text(label) }
                     )
                 }
             }
         }
-    ) { padding ->
-        NavHost(
-            navController = navController,
-            startDestination = "splash",
-            modifier = Modifier.padding(padding)
-        ) {
-            composable("splash") {
-                SplashScreen(
-                    onFinished = { navController.navigate("home") },
-                    modifier = Modifier.fillMaxSize()
-                )
+    ) { inset ->
+        NavHost(nav, startDestination = "home", modifier = Modifier.padding(inset)) {
+            composable("splash") { SplashScreen { nav.navigate("home") { popUpTo("splash") { inclusive = true } } } }
+            composable("home") { HomeScreen(items.sumOf { it.quantity }, productsVm.products.value, { nav.navigate("search") }, { nav.navigate("products?category=${Uri.encode(it)}") }, { nav.navigate("products") }, { nav.navigate("product/${it.id}") }, { nav.navigate("cart") }, { product -> cart.add(product); scope.launch { if (snackbar.showSnackbar("Added to cart", actionLabel = "View cart") == SnackbarResult.ActionPerformed) nav.navigate("cart") } }) }
+            composable("products?category={category}", arguments = listOf(navArgument("category") { type = NavType.StringType; nullable = true; defaultValue = null })) { entry ->
+                val category = entry.arguments?.getString("category")
+                ProductsScreen(productsVm.products.value, category, { nav.navigate("product/${it.id}") }, { product -> cart.add(product); scope.launch { if (snackbar.showSnackbar("Added to cart", actionLabel = "View cart") == SnackbarResult.ActionPerformed) nav.navigate("cart") } }, { nav.popBackStack() })
             }
-            composable("home") {
-                HomeScreen(
-                    modifier = Modifier.fillMaxSize(),
-                    cartCount = cartItems.value.sumOf { it.quantity },
-                    onSearchClick = { navController.navigate("home") },
-                    onCategoryClick = { navController.navigate("home") },
-                    onSeeAllProducts = { navController.navigate("home") },
-                    onProductClick = { navController.navigate("home") }
-                )
+            composable("cart") { CartScreen(items, cart, { if (items.isEmpty()) nav.navigate("products") else if (signedIn) nav.navigate("checkout") else nav.navigate("authRequired?returnTo=checkout&feature=checkout") { launchSingleTop = true } }) }
+            composable("orders") { if (signedIn) OrdersScreen(orders, { nav.navigate("order/${it.id}") }) else AuthenticationRequiredScreen("order history", { nav.navigate("login?returnTo=orders") }, { nav.navigate("signup?returnTo=orders") }, { nav.navigate("home") }) }
+            composable("dashboard") { if (signedIn) AccountScreen(true, orders, { nav.navigate("login") }, { auth.signOut() }) else AuthenticationRequiredScreen("your account", { nav.navigate("login?returnTo=dashboard") }, { nav.navigate("signup?returnTo=dashboard") }, { nav.navigate("home") }) }
+            composable("search") { SearchScreen(productsVm.products.value, { nav.navigate("product/${it.id}") }, { nav.popBackStack() }) }
+            composable("product/{id}", arguments = listOf(navArgument("id") { type = NavType.StringType })) { entry ->
+                val product = productsVm.products.value.firstOrNull { it.id == entry.arguments?.getString("id") }
+                if (product != null) ProductDetailScreen(product, { nav.popBackStack() }, { cart.add(product); scope.launch { snackbar.showSnackbar("Added to cart") } }, { cart.add(product); if (signedIn) nav.navigate("checkout") else nav.navigate("authRequired?returnTo=checkout&feature=checkout") })
             }
-            composable("products") {
-                ProductsScreen(
-                    modifier = Modifier.fillMaxSize(),
-                    cartCount = cartItems.value.sumOf { it.quantity },
-                    onAddToCart = { product ->
-                        val existing = cartItems.value.find { it.product.id == product.id }
-                        if (existing != null) {
-                            cartItems.value = cartItems.value.map {
-                                if (it.product.id == product.id)
-                                    CartItem(it.product, it.quantity + 1)
-                                else it
-                            }
-                        } else {
-                            cartItems.value = cartItems.value + CartItem(product, 1)
-                        }
-                        navController.navigate("cart")
-                    }
-                )
+            composable("authRequired?returnTo={returnTo}&feature={feature}", arguments = listOf(navArgument("returnTo") { nullable = true; defaultValue = "checkout" }, navArgument("feature") { nullable = true; defaultValue = "checkout" })) { entry ->
+                val returnTo = entry.arguments?.getString("returnTo") ?: "checkout"
+                val feature = entry.arguments?.getString("feature") ?: "checkout"
+                AuthenticationRequiredScreen(feature, { nav.navigate("login?returnTo=$returnTo") }, { nav.navigate("signup?returnTo=$returnTo") }, { if (feature == "checkout") nav.navigate("cart") else nav.navigate("home") })
             }
-            composable("cart") {
-                CartScreen(
-                    cartItems = cartItems,
-                    onRemove = { item ->
-                        cartItems.value = cartItems.value.filter { it.product.id != item.product.id }
-                    },
-                    onCheckout = {
-                        if (isLoggedIn.value) {
-                            /* checkout */
-                        } else {
-                            navController.navigate("login")
-                        }
-                    },
-                    modifier = Modifier.fillMaxSize()
-                )
-            }
-            composable("orders") {
-                OrdersScreen(
-                    orders = orders,
-                    modifier = Modifier.fillMaxSize()
-                )
-            }
-            composable("dashboard") {
-                DashboardScreen(
-                    orders = orders,
-                    isLoggedIn = isLoggedIn.value,
-                    onLogin = { navController.navigate("login") },
-                    onSignup = { navController.navigate("signup") },
-                    modifier = Modifier.fillMaxSize()
-                )
-            }
-            composable("signup") {
-                SignupScreen(
-                    onSignup = { name, email, phone, password ->
-                        isLoggedIn.value = true
-                        navController.navigate("home")
-                    },
-                    onLogin = { navController.navigate("login") },
-                    modifier = Modifier.fillMaxSize()
-                )
-            }
-            composable("login") {
-                LoginScreen(
-                    onLogin = { email, password ->
-                        isLoggedIn.value = true
-                        navController.navigate("home")
-                    },
-                    onSignup = { navController.navigate("signup") },
-                    modifier = Modifier.fillMaxSize()
-                )
-            }
-        }
-    }
-}
-
-@Preview(showBackground = true)
-@Composable
-fun GreetingPreview() {
-    KilivanabuyerTheme {
-        Surface(modifier = Modifier.fillMaxSize()) {
-            androidx.compose.material3.Text(text = "Kilivana")
+            composable("checkout") { if (signedIn) CheckoutScreen(items, {
+                scope.launch { snackbar.showSnackbar("Order placement is unavailable because no order service is configured.") }
+            }) else AuthenticationRequiredScreen("checkout", { nav.navigate("login?returnTo=checkout") }, { nav.navigate("signup?returnTo=checkout") }, { nav.navigate("cart") }) }
+            composable("orderConfirmation/{id}") { entry -> OrderConfirmationScreen(entry.arguments?.getString("id").orEmpty()) { nav.navigate("orders") { popUpTo("home") } } }
+            composable("order/{id}") { entry -> orders.firstOrNull { it.id == entry.arguments?.getString("id") }?.let { OrderDetailScreen(it) { it.items.forEach { line -> cart.add(line.product, line.quantity) }; nav.navigate("cart") } } }
+            composable("login?returnTo={returnTo}", arguments = listOf(navArgument("returnTo") { nullable = true; defaultValue = "home" })) { entry -> AuthScreen(false, { email, password -> if (auth.signIn(email, password)) nav.navigate(entry.arguments?.getString("returnTo") ?: "home") { popUpTo("login?returnTo={returnTo}") { inclusive = true } } else scope.launch { snackbar.showSnackbar("Sign-in is unavailable because no authentication service is configured.") } }, { nav.navigate("signup?returnTo=${entry.arguments?.getString("returnTo") ?: "home"}") }) }
+            composable("signup?returnTo={returnTo}", arguments = listOf(navArgument("returnTo") { nullable = true; defaultValue = "home" })) { entry -> AuthScreen(true, { email, password -> if (auth.signIn(email, password)) nav.navigate(entry.arguments?.getString("returnTo") ?: "home") { popUpTo("signup?returnTo={returnTo}") { inclusive = true } } else scope.launch { snackbar.showSnackbar("Account creation is unavailable because no authentication service is configured.") } }, { nav.navigate("login?returnTo=${entry.arguments?.getString("returnTo") ?: "home"}") }) }
         }
     }
 }

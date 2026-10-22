@@ -1,0 +1,40 @@
+package com.example.kilivana_buyer.ui.screens
+
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.unit.dp
+import com.example.kilivana_buyer.R
+import com.example.kilivana_buyer.data.CartViewModel
+import com.example.kilivana_buyer.model.*
+import com.example.kilivana_buyer.ui.theme.*
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+
+fun Modifier.horizontalScrollCompat(): Modifier = this
+@Composable fun SectionHeader(title: String, action: String, onClick: () -> Unit = {}) { Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) { Text(title, Modifier.weight(1f), style = MaterialTheme.typography.titleLarge); if (action.isNotEmpty()) TextButton(onClick) { Text(action) } } }
+@Composable fun ProductGrid(products: List<Product>, open: (Product) -> Unit, add: suspend (Product) -> Unit) { Column(Modifier.padding(horizontal = 12.dp)) { products.chunked(2).forEach { row -> Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) { row.forEach { ProductTile(it, Modifier.weight(1f), open, add) }; if (row.size == 1) Spacer(Modifier.weight(1f)) } } } }
+@Composable fun ProductTile(product: Product, modifier: Modifier = Modifier, open: (Product) -> Unit, add: suspend (Product) -> Unit) {
+    val scope = rememberCoroutineScope()
+    Card(modifier.padding(bottom = 12.dp).clickable { open(product) }, shape = RoundedCornerShape(12.dp), border = BorderStroke(1.dp, Green100), colors = CardDefaults.cardColors(containerColor = NeutralSurface)) { Column { ProductImage(product.imageRes, Modifier.fillMaxWidth()); Column(Modifier.padding(10.dp)) { if (product.stockStatus == StockStatus.LowStock) Text("Low stock", color = LowStockAccent, style = MaterialTheme.typography.labelSmall); Text(product.name, maxLines = 2, style = MaterialTheme.typography.titleMedium); Text("${formatKes(product.pricePerUnit)} / ${product.unit}", color = Green600, style = MaterialTheme.typography.labelLarge); Text("Sold by ${product.sellerName}", maxLines = 1, style = MaterialTheme.typography.labelSmall, color = TextSecondary); Row(verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Default.Star, null, tint = LowStockAccent, modifier = Modifier.size(16.dp)); Text("${product.rating} (${product.reviewCount})", style = MaterialTheme.typography.labelSmall); Spacer(Modifier.weight(1f)); FilledTonalIconButton(onClick = { scope.launch { add(product) } }, modifier = Modifier.size(40.dp)) { Icon(Icons.Default.AddShoppingCart, "Add to cart") } } } } }
+}
+@Composable fun ProductImage(imageRes: Int, modifier: Modifier = Modifier) { Image(painterResource(imageRes), null, modifier.aspectRatio(1f).clip(RoundedCornerShape(12.dp)), contentScale = ContentScale.Crop) }
