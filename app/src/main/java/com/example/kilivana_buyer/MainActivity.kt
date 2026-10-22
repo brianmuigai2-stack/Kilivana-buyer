@@ -5,7 +5,7 @@ import android.net.Uri
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.core.view.WindowCompat
+import androidx.activity.SystemBarStyle
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -46,8 +46,9 @@ import kotlinx.coroutines.launch
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        enableEdgeToEdge()
-        WindowCompat.getInsetsController(window, window.decorView).isAppearanceLightStatusBars = true
+        enableEdgeToEdge(
+            statusBarStyle = SystemBarStyle.dark(android.graphics.Color.rgb(46, 125, 50))
+        )
         setContent { KilivanabuyerTheme { KilivanaApp() } }
     }
 }
@@ -96,7 +97,15 @@ fun KilivanaApp(
             }
             composable("cart") { CartScreen(items, cart, { if (items.isEmpty()) nav.navigate("products") else if (signedIn) nav.navigate("checkout") else nav.navigate("authRequired?returnTo=checkout&feature=checkout") { launchSingleTop = true } }) }
             composable("orders") { if (signedIn) OrdersScreen(orders, { nav.navigate("order/${it.id}") }) else AuthenticationRequiredScreen("order history", { nav.navigate("login?returnTo=orders") }, { nav.navigate("signup?returnTo=orders") }, { nav.navigate("home") }) }
-            composable("dashboard") { if (signedIn) AccountScreen(true, orders, { nav.navigate("login") }, { auth.signOut() }) else AuthenticationRequiredScreen("your account", { nav.navigate("login?returnTo=dashboard") }, { nav.navigate("signup?returnTo=dashboard") }, { nav.navigate("home") }) }
+            composable("dashboard") {
+                AccountScreen(
+                    loggedIn = signedIn,
+                    orders = orders,
+                    login = { nav.navigate("login?returnTo=dashboard") },
+                    logout = { auth.signOut() },
+                    createAccount = { nav.navigate("signup?returnTo=dashboard") }
+                )
+            }
             composable("search") { SearchScreen(productsVm.products.value, { nav.navigate("product/${it.id}") }, { nav.popBackStack() }) }
             composable("product/{id}", arguments = listOf(navArgument("id") { type = NavType.StringType })) { entry ->
                 val product = productsVm.products.value.firstOrNull { it.id == entry.arguments?.getString("id") }
