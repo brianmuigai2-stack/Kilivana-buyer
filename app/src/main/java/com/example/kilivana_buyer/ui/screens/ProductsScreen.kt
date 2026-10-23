@@ -92,9 +92,10 @@ fun ProductsScreen(
             }
         }
         if (shown.isEmpty()) {
-            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("No products found")
+                    Text("No products match those filters", style = MaterialTheme.typography.titleMedium)
+                    Text("Try changing your search or filter settings.", color = TextSecondary)
                     TextButton(onClick = { query = ""; category = null; stockOnly = false; priceLimit = maxPrice }) { Text("Clear filters") }
                 }
             }

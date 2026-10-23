@@ -22,5 +22,5 @@ object FakeData {
         product("eggs", "Farm eggs", "Poultry and Eggs", 450, "tray", R.drawable.produce_eggs, "Highland Poultry", "Kiambu"),
         product("fresh_milk", "Fresh milk", "Dairy", 75, "litre", R.drawable.produce_fresh_milk, "Karibu Dairy", "Nyandarua")
     )
-    private fun product(id:String,name:String,category:String,price:Int,unit:String,image:Int,seller:String,town:String)=Product(id,name,category,price,unit,"Fresh produce sourced directly from verified farmers. Packed carefully for delivery.",image,seller,town,if(id=="eggs") StockStatus.LowStock else StockStatus.InStock,1,4.7,36,"Harvested this week")
+    private fun product(id:String,name:String,category:String,price:Int,unit:String,image:Int,seller:String,town:String)=Product(id,name,category,price,unit,"Fresh produce sourced from local farms and packed carefully for delivery.",image,seller,town,if(id=="eggs") StockStatus.LowStock else StockStatus.InStock,1,4.7,36,"Harvested this week")
 }

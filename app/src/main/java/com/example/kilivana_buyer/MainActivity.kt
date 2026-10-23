@@ -61,6 +61,7 @@ fun KilivanaApp(
     val nav = rememberNavController()
     val items by cart.items.collectAsState()
     val orders by ordersVm.orders.collectAsState()
+    val savedProductIds by productsVm.savedProductIds.collectAsState()
     val signedIn by auth.loggedIn.collectAsState()
     val backStack by nav.currentBackStackEntryAsState()
     val route = backStack?.destination?.route
@@ -96,20 +97,41 @@ fun KilivanaApp(
                 ProductsScreen(productsVm.products.value, category, { nav.navigate("product/${it.id}") }, { product -> cart.add(product); scope.launch { if (snackbar.showSnackbar("Added to cart", actionLabel = "View cart") == SnackbarResult.ActionPerformed) nav.navigate("cart") } }, { nav.popBackStack() })
             }
             composable("cart") { CartScreen(items, cart, { if (items.isEmpty()) nav.navigate("products") else if (signedIn) nav.navigate("checkout") else nav.navigate("authRequired?returnTo=checkout&feature=checkout") { launchSingleTop = true } }) }
-            composable("orders") { if (signedIn) OrdersScreen(orders, { nav.navigate("order/${it.id}") }) else AuthenticationRequiredScreen("order history", { nav.navigate("login?returnTo=orders") }, { nav.navigate("signup?returnTo=orders") }, { nav.navigate("home") }) }
+            composable("orders") { if (signedIn) OrdersScreen(orders, { nav.navigate("order/${it.id}") }, { nav.navigate("products") }) else AuthenticationRequiredScreen("order history", { nav.navigate("login?returnTo=orders") }, { nav.navigate("signup?returnTo=orders") }, { nav.navigate("home") }) }
             composable("dashboard") {
                 AccountScreen(
                     loggedIn = signedIn,
                     orders = orders,
                     login = { nav.navigate("login?returnTo=dashboard") },
                     logout = { auth.signOut() },
-                    createAccount = { nav.navigate("signup?returnTo=dashboard") }
+                    createAccount = { nav.navigate("signup?returnTo=dashboard") },
+                    openOrders = { nav.navigate("orders") },
+                    openSavedItems = { nav.navigate("savedItems") }
                 )
             }
             composable("search") { SearchScreen(productsVm.products.value, { nav.navigate("product/${it.id}") }, { nav.popBackStack() }) }
+            composable("savedItems") {
+                SavedItemsScreen(
+                    products = productsVm.products.value.filter { it.id in savedProductIds },
+                    open = { nav.navigate("product/${it.id}") },
+                    add = { product ->
+                        cart.add(product)
+                        scope.launch { snackbar.showSnackbar("Added to cart") }
+                    },
+                    back = { nav.popBackStack() },
+                    shop = { nav.navigate("products") }
+                )
+            }
             composable("product/{id}", arguments = listOf(navArgument("id") { type = NavType.StringType })) { entry ->
                 val product = productsVm.products.value.firstOrNull { it.id == entry.arguments?.getString("id") }
-                if (product != null) ProductDetailScreen(product, { nav.popBackStack() }, { cart.add(product); scope.launch { snackbar.showSnackbar("Added to cart") } }, { cart.add(product); if (signedIn) nav.navigate("checkout") else nav.navigate("authRequired?returnTo=checkout&feature=checkout") })
+                if (product != null) ProductDetailScreen(
+                    product = product,
+                    isSaved = product.id in savedProductIds,
+                    back = { nav.popBackStack() },
+                    toggleSaved = { productsVm.toggleSaved(product.id) },
+                    add = { cart.add(product); scope.launch { snackbar.showSnackbar("Added to cart") } },
+                    buy = { cart.add(product); if (signedIn) nav.navigate("checkout") else nav.navigate("authRequired?returnTo=checkout&feature=checkout") }
+                )
             }
             composable("authRequired?returnTo={returnTo}&feature={feature}", arguments = listOf(navArgument("returnTo") { nullable = true; defaultValue = "checkout" }, navArgument("feature") { nullable = true; defaultValue = "checkout" })) { entry ->
                 val returnTo = entry.arguments?.getString("returnTo") ?: "checkout"
@@ -117,12 +139,12 @@ fun KilivanaApp(
                 AuthenticationRequiredScreen(feature, { nav.navigate("login?returnTo=$returnTo") }, { nav.navigate("signup?returnTo=$returnTo") }, { if (feature == "checkout") nav.navigate("cart") else nav.navigate("home") })
             }
             composable("checkout") { if (signedIn) CheckoutScreen(items, {
-                scope.launch { snackbar.showSnackbar("Order placement is unavailable because no order service is configured.") }
-            }) else AuthenticationRequiredScreen("checkout", { nav.navigate("login?returnTo=checkout") }, { nav.navigate("signup?returnTo=checkout") }, { nav.navigate("cart") }) }
+                scope.launch { snackbar.showSnackbar("Details are valid. Order placement will be available once Kilivana’s services are connected.") }
+            }, { nav.popBackStack() }) else AuthenticationRequiredScreen("checkout", { nav.navigate("login?returnTo=checkout") }, { nav.navigate("signup?returnTo=checkout") }, { nav.navigate("cart") }) }
             composable("orderConfirmation/{id}") { entry -> OrderConfirmationScreen(entry.arguments?.getString("id").orEmpty()) { nav.navigate("orders") { popUpTo("home") } } }
             composable("order/{id}") { entry -> orders.firstOrNull { it.id == entry.arguments?.getString("id") }?.let { OrderDetailScreen(it) { it.items.forEach { line -> cart.add(line.product, line.quantity) }; nav.navigate("cart") } } }
-            composable("login?returnTo={returnTo}", arguments = listOf(navArgument("returnTo") { nullable = true; defaultValue = "home" })) { entry -> AuthScreen(false, { email, password -> if (auth.signIn(email, password)) nav.navigate(entry.arguments?.getString("returnTo") ?: "home") { popUpTo("login?returnTo={returnTo}") { inclusive = true } } else scope.launch { snackbar.showSnackbar("Sign-in is unavailable because no authentication service is configured.") } }, { nav.navigate("signup?returnTo=${entry.arguments?.getString("returnTo") ?: "home"}") }) }
-            composable("signup?returnTo={returnTo}", arguments = listOf(navArgument("returnTo") { nullable = true; defaultValue = "home" })) { entry -> AuthScreen(true, { email, password -> if (auth.signIn(email, password)) nav.navigate(entry.arguments?.getString("returnTo") ?: "home") { popUpTo("signup?returnTo={returnTo}") { inclusive = true } } else scope.launch { snackbar.showSnackbar("Account creation is unavailable because no authentication service is configured.") } }, { nav.navigate("login?returnTo=${entry.arguments?.getString("returnTo") ?: "home"}") }) }
+            composable("login?returnTo={returnTo}", arguments = listOf(navArgument("returnTo") { nullable = true; defaultValue = "home" })) { entry -> AuthScreen(false, { email, password -> if (auth.signIn(email, password)) nav.navigate(entry.arguments?.getString("returnTo") ?: "home") { popUpTo("login?returnTo={returnTo}") { inclusive = true } } else scope.launch { snackbar.showSnackbar("Sign-in is unavailable because no authentication service is configured.") } }, { nav.navigate("signup?returnTo=${entry.arguments?.getString("returnTo") ?: "home"}") }, { nav.popBackStack() }) }
+            composable("signup?returnTo={returnTo}", arguments = listOf(navArgument("returnTo") { nullable = true; defaultValue = "home" })) { entry -> AuthScreen(true, { email, password -> if (auth.signIn(email, password)) nav.navigate(entry.arguments?.getString("returnTo") ?: "home") { popUpTo("signup?returnTo={returnTo}") { inclusive = true } } else scope.launch { snackbar.showSnackbar("Account creation is unavailable because no authentication service is configured.") } }, { nav.navigate("login?returnTo=${entry.arguments?.getString("returnTo") ?: "home"}") }, { nav.popBackStack() }) }
         }
     }
 }

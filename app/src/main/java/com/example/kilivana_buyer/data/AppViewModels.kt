@@ -49,6 +49,10 @@ class CartViewModel(application: Application) : AndroidViewModel(application) {
 class ProductsViewModel(private val repository: ProductRepository = FakeProductRepository()) : ViewModel() {
     val products = MutableStateFlow(repository.getProducts())
     val category = MutableStateFlow<String?>(null)
+    val savedProductIds = MutableStateFlow<Set<String>>(emptySet())
+    fun toggleSaved(id: String) {
+        savedProductIds.value = if (id in savedProductIds.value) savedProductIds.value - id else savedProductIds.value + id
+    }
 }
 class OrdersViewModel(private val repository: OrderRepository = FakeOrderRepository()) : ViewModel() {
     private val _orders=MutableStateFlow(repository.getOrders())

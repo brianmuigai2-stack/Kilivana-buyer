@@ -6,6 +6,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.*
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -30,11 +31,36 @@ import com.example.kilivana_buyer.ui.theme.*
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
-fun Modifier.horizontalScrollCompat(): Modifier = this
+@Composable fun Modifier.horizontalScrollCompat(): Modifier = this.horizontalScroll(rememberScrollState())
+@Composable fun Modifier.verticalScrollCompat(): Modifier = this.verticalScroll(rememberScrollState())
 @Composable fun SectionHeader(title: String, action: String, onClick: () -> Unit = {}) { Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) { Text(title, Modifier.weight(1f), style = MaterialTheme.typography.titleLarge); if (action.isNotEmpty()) TextButton(onClick) { Text(action) } } }
 @Composable fun ProductGrid(products: List<Product>, open: (Product) -> Unit, add: suspend (Product) -> Unit) { Column(Modifier.padding(horizontal = 12.dp)) { products.chunked(2).forEach { row -> Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) { row.forEach { ProductTile(it, Modifier.weight(1f), open, add) }; if (row.size == 1) Spacer(Modifier.weight(1f)) } } } }
 @Composable fun ProductTile(product: Product, modifier: Modifier = Modifier, open: (Product) -> Unit, add: suspend (Product) -> Unit) {
     val scope = rememberCoroutineScope()
-    Card(modifier.padding(bottom = 12.dp).clickable { open(product) }, shape = RoundedCornerShape(12.dp), border = BorderStroke(1.dp, Green100), colors = CardDefaults.cardColors(containerColor = NeutralSurface)) { Column { ProductImage(product.imageRes, Modifier.fillMaxWidth()); Column(Modifier.padding(10.dp)) { if (product.stockStatus == StockStatus.LowStock) Text("Low stock", color = LowStockAccent, style = MaterialTheme.typography.labelSmall); Text(product.name, maxLines = 2, style = MaterialTheme.typography.titleMedium); Text("${formatKes(product.pricePerUnit)} / ${product.unit}", color = Green600, style = MaterialTheme.typography.labelLarge); Text("Sold by ${product.sellerName}", maxLines = 1, style = MaterialTheme.typography.labelSmall, color = TextSecondary); Row(verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Default.Star, null, tint = LowStockAccent, modifier = Modifier.size(16.dp)); Text("${product.rating} (${product.reviewCount})", style = MaterialTheme.typography.labelSmall); Spacer(Modifier.weight(1f)); FilledTonalIconButton(onClick = { scope.launch { add(product) } }, modifier = Modifier.size(40.dp)) { Icon(Icons.Default.AddShoppingCart, "Add to cart") } } } } }
+    Card(modifier.padding(bottom = 12.dp).clickable { open(product) }, shape = RoundedCornerShape(16.dp), border = BorderStroke(1.dp, NeutralDivider.copy(alpha = .65f)), colors = CardDefaults.cardColors(containerColor = NeutralSurface)) {
+        Column {
+            ProductImage(product.imageRes, Modifier.fillMaxWidth(), product.name)
+            Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                when (product.stockStatus) {
+                    StockStatus.LowStock -> Text("Limited stock", color = LowStockAccent, style = MaterialTheme.typography.labelSmall)
+                    StockStatus.OutOfStock -> Text("Currently unavailable", color = ErrorRed, style = MaterialTheme.typography.labelSmall)
+                    StockStatus.InStock -> Text(product.category, color = TextSecondary, style = MaterialTheme.typography.labelSmall)
+                }
+                Text(product.name, maxLines = 2, style = MaterialTheme.typography.titleMedium)
+                Text("${formatKes(product.pricePerUnit)} / ${product.unit}", color = Green700, style = MaterialTheme.typography.titleSmall)
+                Text(product.sellerName, maxLines = 1, style = MaterialTheme.typography.labelSmall, color = TextSecondary)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Star, null, tint = LowStockAccent, modifier = Modifier.size(16.dp))
+                    Text("${product.rating} · ${product.reviewCount}", style = MaterialTheme.typography.labelSmall)
+                    Spacer(Modifier.weight(1f))
+                    FilledTonalIconButton(
+                        onClick = { scope.launch { add(product) } },
+                        modifier = Modifier.size(40.dp),
+                        enabled = product.stockStatus != StockStatus.OutOfStock
+                    ) { Icon(Icons.Default.AddShoppingCart, "Add ${product.name} to cart") }
+                }
+            }
+        }
+    }
 }
-@Composable fun ProductImage(imageRes: Int, modifier: Modifier = Modifier) { Image(painterResource(imageRes), null, modifier.aspectRatio(1f).clip(RoundedCornerShape(12.dp)), contentScale = ContentScale.Crop) }
+@Composable fun ProductImage(imageRes: Int, modifier: Modifier = Modifier, contentDescription: String? = null) { Image(painterResource(imageRes), contentDescription, modifier.aspectRatio(1f).clip(RoundedCornerShape(12.dp)), contentScale = ContentScale.Crop) }

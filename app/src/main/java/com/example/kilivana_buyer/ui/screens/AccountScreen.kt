@@ -6,6 +6,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ReceiptLong
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
@@ -22,7 +23,9 @@ fun AccountScreen(
     orders: List<Order>,
     login: () -> Unit,
     logout: () -> Unit,
-    createAccount: () -> Unit
+    createAccount: () -> Unit,
+    openOrders: () -> Unit,
+    openSavedItems: () -> Unit
 ) {
     LazyColumn(
         Modifier.fillMaxSize().background(NeutralBackground),
@@ -58,12 +61,13 @@ fun AccountScreen(
                 ) {
                     Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         Text("Your account helps you", style = MaterialTheme.typography.titleMedium)
-                        AccountBenefit(Icons.Default.ReceiptLong, "Track orders", "See delivery progress and purchase history")
+                        AccountBenefit(Icons.AutoMirrored.Filled.ReceiptLong, "Track orders", "See delivery progress and purchase history")
                         AccountBenefit(Icons.Default.LocationOn, "Save delivery details", "Make your next checkout quicker")
                         AccountBenefit(Icons.Default.FavoriteBorder, "Keep favourites", "Find the produce you love again")
                         Spacer(Modifier.height(2.dp))
                         Button(onClick = login, Modifier.fillMaxWidth()) { Text("Sign in") }
                         OutlinedButton(onClick = createAccount, Modifier.fillMaxWidth()) { Text("Create account") }
+                        TextButton(onClick = openSavedItems, modifier = Modifier.fillMaxWidth()) { Text("View saved items") }
                         Text("You can continue browsing without an account.", style = MaterialTheme.typography.bodySmall, color = TextSecondary)
                     }
                 }
@@ -95,9 +99,15 @@ fun AccountScreen(
                 Surface(shape = RoundedCornerShape(18.dp), color = NeutralSurface, modifier = Modifier.fillMaxWidth()) {
                     Column {
                         listOf("My orders", "Saved items", "Addresses", "Payment methods", "Notifications", "Help and support", "About").forEach { label ->
-                            TextButton(onClick = {}, modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp)) {
-                                Text(label, Modifier.weight(1f), color = TextPrimary)
-                                Icon(Icons.Default.ChevronRight, contentDescription = null, tint = TextSecondary)
+                            val actionable = label == "My orders" || label == "Saved items"
+                            TextButton(
+                                onClick = { when (label) { "My orders" -> openOrders(); "Saved items" -> openSavedItems() } },
+                                enabled = actionable,
+                                modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp)
+                            ) {
+                                Text(label, Modifier.weight(1f), color = if (actionable) TextPrimary else TextSecondary)
+                                if (actionable) Icon(Icons.Default.ChevronRight, contentDescription = null, tint = TextSecondary)
+                                else Text("Soon", color = TextSecondary, style = MaterialTheme.typography.labelSmall)
                             }
                         }
                     }

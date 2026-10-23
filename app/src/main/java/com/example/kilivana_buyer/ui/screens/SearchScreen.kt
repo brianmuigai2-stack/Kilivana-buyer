@@ -1,34 +1,85 @@
 package com.example.kilivana_buyer.ui.screens
 
-import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.*
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
-import com.example.kilivana_buyer.R
-import com.example.kilivana_buyer.data.CartViewModel
-import com.example.kilivana_buyer.model.*
+import com.example.kilivana_buyer.model.Product
+import com.example.kilivana_buyer.model.formatKes
 import com.example.kilivana_buyer.ui.theme.*
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 
-
-@Composable fun SearchScreen(products:List<Product>,open:(Product)->Unit,back:()->Unit) { var query by remember { mutableStateOf("") }; Column(Modifier.fillMaxSize().padding(16.dp)) { Row(verticalAlignment=Alignment.CenterVertically) { IconButton(back){Icon(Icons.AutoMirrored.Filled.ArrowBack,"Back")}; OutlinedTextField(query,{query=it},Modifier.weight(1f),placeholder={Text("Search produce")},singleLine=true) }; Text("Recent searches",style=MaterialTheme.typography.titleMedium); Text("Tomatoes · Sukuma wiki · Maize"); LazyColumn { items(products.filter { it.name.contains(query,true) || it.category.contains(query,true) }) { Text(it.name,Modifier.fillMaxWidth().clickable { open(it) }.padding(14.dp)) } } } }
+@Composable
+fun SearchScreen(products: List<Product>, open: (Product) -> Unit, back: () -> Unit) {
+    var query by remember { mutableStateOf("") }
+    val results = products.filter {
+        it.name.contains(query.trim(), ignoreCase = true) ||
+            it.category.contains(query.trim(), ignoreCase = true) ||
+            it.sellerName.contains(query.trim(), ignoreCase = true)
+    }
+    Column(Modifier.fillMaxSize().background(NeutralBackground)) {
+        Row(
+            Modifier.fillMaxWidth().padding(start = 4.dp, end = 16.dp, top = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            IconButton(back) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back") }
+            Text("Search produce", style = MaterialTheme.typography.headlineSmall)
+        }
+        OutlinedTextField(
+            query,
+            { query = it },
+            Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+            placeholder = { Text("Try tomatoes or vegetables") },
+            leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+            trailingIcon = { if (query.isNotBlank()) TextButton(onClick = { query = "" }) { Text("Clear") } },
+            singleLine = true,
+            shape = RoundedCornerShape(14.dp)
+        )
+        Text(
+            if (query.isBlank()) "Popular produce" else "${results.size} results",
+            Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
+            style = MaterialTheme.typography.titleMedium
+        )
+        if (results.isEmpty()) {
+            Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text("No matches yet", style = MaterialTheme.typography.titleLarge)
+                    Text("Try a different product, category, or seller.", color = TextSecondary)
+                    TextButton(onClick = { query = "" }) { Text("Clear search") }
+                }
+            }
+        } else {
+            LazyColumn(
+                Modifier.weight(1f),
+                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                items(results, key = { it.id }) { product ->
+                    Surface(
+                        Modifier.fillMaxWidth().clickable { open(product) },
+                        shape = RoundedCornerShape(16.dp), color = NeutralSurface,
+                        border = androidx.compose.foundation.BorderStroke(1.dp, NeutralDivider.copy(alpha = .65f))
+                    ) {
+                        Row(Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                            ProductImage(product.imageRes, Modifier.size(76.dp), product.name)
+                            Column(Modifier.weight(1f).padding(start = 12.dp)) {
+                                Text(product.name, style = MaterialTheme.typography.titleMedium)
+                                Text("${product.category} · ${product.sellerName}", color = TextSecondary, style = MaterialTheme.typography.bodySmall)
+                                Text("${formatKes(product.pricePerUnit)} / ${product.unit}", color = Green700, style = MaterialTheme.typography.titleSmall)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

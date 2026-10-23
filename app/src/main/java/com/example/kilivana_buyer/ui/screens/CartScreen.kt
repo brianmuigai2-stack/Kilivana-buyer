@@ -10,6 +10,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Remove
+import androidx.compose.material.icons.filled.ShoppingBasket
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -27,7 +28,14 @@ fun CartScreen(items: List<CartItem>, vm: CartViewModel, checkout: () -> Unit) {
         if (items.isEmpty()) {
             Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("Your cart is empty")
+                    Surface(Modifier.size(72.dp), shape = RoundedCornerShape(24.dp), color = Green50) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(Icons.Default.ShoppingBasket, contentDescription = null, tint = Green600, modifier = Modifier.size(34.dp))
+                        }
+                    }
+                    Spacer(Modifier.height(14.dp))
+                    Text("Your cart is waiting", style = MaterialTheme.typography.titleLarge)
+                    Text("Add fresh produce and it will show up here.", color = TextSecondary)
                     Button(onClick = checkout) { Text("Start shopping") }
                 }
             }
@@ -63,7 +71,8 @@ fun CartScreen(items: List<CartItem>, vm: CartViewModel, checkout: () -> Unit) {
                                         OutlinedIconButton(
                                             onClick = { vm.decrement(line.product.id) },
                                             modifier = Modifier.size(40.dp),
-                                            shape = RoundedCornerShape(10.dp)
+                                            shape = RoundedCornerShape(10.dp),
+                                            enabled = line.quantity > line.product.minimumOrder
                                         ) { Icon(Icons.Default.Remove, contentDescription = "Decrease quantity") }
                                         Text(
                                             line.quantity.toString(),
@@ -87,11 +96,23 @@ fun CartScreen(items: List<CartItem>, vm: CartViewModel, checkout: () -> Unit) {
                     }
                 }
             }
-            OutlinedTextField("", {}, Modifier.fillMaxWidth(), label = { Text("Promo code") }, singleLine = true)
-            Spacer(Modifier.height(12.dp))
-            Text("Items subtotal  ${formatKes(vm.subtotal)}")
-            Text("Delivery fee calculated at checkout", style = MaterialTheme.typography.bodySmall)
-            Text("Total before delivery  ${formatKes(vm.subtotal)}", style = MaterialTheme.typography.titleLarge)
+            Surface(shape = RoundedCornerShape(18.dp), color = NeutralSurface, modifier = Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text("Items subtotal", color = TextSecondary)
+                        Text(formatKes(vm.subtotal))
+                    }
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text("Delivery", color = TextSecondary)
+                        Text("Shown at checkout", style = MaterialTheme.typography.bodySmall)
+                    }
+                    HorizontalDivider(color = NeutralDivider)
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text("Total before delivery", style = MaterialTheme.typography.titleMedium)
+                        Text(formatKes(vm.subtotal), style = MaterialTheme.typography.titleMedium, color = Green700)
+                    }
+                }
+            }
             Button(onClick = checkout, Modifier.fillMaxWidth().padding(top = 12.dp), enabled = items.isNotEmpty()) {
                 Text("Proceed to checkout")
             }
