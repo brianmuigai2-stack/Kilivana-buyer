@@ -11,6 +11,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.ShoppingBasket
+import androidx.compose.material.icons.filled.ArrowForward
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -24,7 +25,14 @@ import com.example.kilivana_buyer.ui.theme.*
 @Composable
 fun CartScreen(items: List<CartItem>, vm: CartViewModel, checkout: () -> Unit) {
     Column(Modifier.fillMaxSize().background(NeutralBackground).padding(16.dp)) {
-        Text("Cart", style = MaterialTheme.typography.headlineMedium)
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text("Your cart", Modifier.weight(1f), style = MaterialTheme.typography.headlineMedium)
+            if (items.isNotEmpty()) {
+                Surface(shape = RoundedCornerShape(50), color = Green50) {
+                    Text("${items.sumOf { it.quantity }} items", Modifier.padding(horizontal = 12.dp, vertical = 7.dp), color = Green700, style = MaterialTheme.typography.labelLarge)
+                }
+            }
+        }
         if (items.isEmpty()) {
             Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -43,54 +51,92 @@ fun CartScreen(items: List<CartItem>, vm: CartViewModel, checkout: () -> Unit) {
             LazyColumn(
                 Modifier.weight(1f),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
-                contentPadding = PaddingValues(vertical = 12.dp)
+                contentPadding = PaddingValues(top = 16.dp, bottom = 12.dp)
             ) {
                 items(items, key = { it.product.id }) { line ->
                     Card(
                         modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(22.dp),
                         border = BorderStroke(1.dp, Green100),
                         colors = CardDefaults.cardColors(containerColor = NeutralSurface)
                     ) {
-                        Row(
-                            Modifier.fillMaxWidth().padding(12.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            ProductImage(line.product.imageRes, Modifier.size(88.dp))
-                            Column(Modifier.weight(1f).padding(start = 12.dp)) {
-                                Text(line.product.name, style = MaterialTheme.typography.titleMedium)
-                                Text("Sold by ${line.product.sellerName}", style = MaterialTheme.typography.bodySmall)
-                                Text("${formatKes(line.product.pricePerUnit)} / ${line.product.unit}", color = Green600)
-                                Row(
-                                    Modifier.fillMaxWidth().padding(top = 4.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        modifier = Modifier.height(40.dp)
+                        Column(Modifier.fillMaxWidth().padding(14.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Box {
+                                    ProductImage(line.product.imageRes, Modifier.size(112.dp), line.product.name)
+                                    Surface(
+                                        modifier = Modifier.padding(8.dp).align(Alignment.TopStart),
+                                        shape = RoundedCornerShape(50),
+                                        color = NeutralSurface.copy(alpha = .94f)
                                     ) {
-                                        OutlinedIconButton(
-                                            onClick = { vm.decrement(line.product.id) },
-                                            modifier = Modifier.size(40.dp),
-                                            shape = RoundedCornerShape(10.dp),
-                                            enabled = line.quantity > line.product.minimumOrder
-                                        ) { Icon(Icons.Default.Remove, contentDescription = "Decrease quantity") }
-                                        Text(
-                                            line.quantity.toString(),
-                                            Modifier.widthIn(min = 42.dp).padding(horizontal = 8.dp),
-                                            style = MaterialTheme.typography.titleMedium
-                                        )
-                                        OutlinedIconButton(
-                                            onClick = { vm.increment(line.product.id) },
-                                            modifier = Modifier.size(40.dp),
-                                            shape = RoundedCornerShape(10.dp)
-                                        ) { Icon(Icons.Default.Add, contentDescription = "Increase quantity") }
-                                    }
-                                    Spacer(Modifier.weight(1f))
-                                    TextButton(onClick = { vm.remove(line.product.id) }) {
-                                        Icon(Icons.Default.DeleteOutline, contentDescription = null)
-                                        Text("Remove")
+                                        Text(line.product.category, Modifier.padding(horizontal = 9.dp, vertical = 5.dp), color = Green700, style = MaterialTheme.typography.labelSmall)
                                     }
                                 }
+                                Column(Modifier.weight(1f).padding(start = 14.dp)) {
+                                    Text(line.product.name, style = MaterialTheme.typography.titleLarge)
+                                    Text("From ${line.product.sellerName}", style = MaterialTheme.typography.bodySmall, color = TextSecondary)
+                                    Spacer(Modifier.height(10.dp))
+                                    Text(formatKes(line.product.pricePerUnit), style = MaterialTheme.typography.titleMedium, color = Green700)
+                                    Text("per ${line.product.unit}", style = MaterialTheme.typography.bodySmall, color = TextSecondary)
+                                }
+                            }
+                            Spacer(Modifier.height(14.dp))
+                            HorizontalDivider(color = NeutralDivider)
+                            Row(
+                                Modifier.fillMaxWidth().padding(top = 12.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    OutlinedIconButton(
+                                        onClick = { vm.decrement(line.product.id) },
+                                        modifier = Modifier.size(42.dp),
+                                        shape = RoundedCornerShape(13.dp),
+                                        enabled = line.quantity > line.product.minimumOrder
+                                    ) { Icon(Icons.Default.Remove, contentDescription = "Decrease quantity") }
+                                    Text(line.quantity.toString(), style = MaterialTheme.typography.titleMedium)
+                                    OutlinedIconButton(
+                                        onClick = { vm.increment(line.product.id) },
+                                        modifier = Modifier.size(42.dp),
+                                        shape = RoundedCornerShape(13.dp)
+                                    ) { Icon(Icons.Default.Add, contentDescription = "Increase quantity") }
+                                }
+                                Spacer(Modifier.weight(1f))
+                                Column(horizontalAlignment = Alignment.End) {
+                                    Text("Line total", style = MaterialTheme.typography.labelSmall, color = TextSecondary)
+                                    Text(formatKes(line.product.pricePerUnit * line.quantity), style = MaterialTheme.typography.titleMedium, color = Green700)
+                                }
+                            }
+                            TextButton(
+                                onClick = { vm.remove(line.product.id) },
+                                modifier = Modifier.align(Alignment.End)
+                            ) {
+                                Icon(Icons.Default.DeleteOutline, contentDescription = null)
+                                Text("Remove item")
+                            }
+                        }
+                    }
+                }
+                if (items.size == 1) {
+                    item {
+                        Surface(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(16.dp),
+                            color = Green50
+                        ) {
+                            Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Surface(shape = RoundedCornerShape(12.dp), color = NeutralSurface, modifier = Modifier.size(42.dp)) {
+                                    Box(contentAlignment = Alignment.Center) {
+                                        Icon(Icons.Default.ShoppingBasket, null, tint = Green600)
+                                    }
+                                }
+                                Column(Modifier.weight(1f).padding(start = 12.dp)) {
+                                    Text("A great start", style = MaterialTheme.typography.titleSmall, color = Green700)
+                                    Text("Add more local favourites whenever you're ready.", style = MaterialTheme.typography.bodySmall, color = TextSecondary)
+                                }
+                                Icon(Icons.Default.ArrowForward, null, tint = Green600, modifier = Modifier.size(18.dp))
                             }
                         }
                     }
