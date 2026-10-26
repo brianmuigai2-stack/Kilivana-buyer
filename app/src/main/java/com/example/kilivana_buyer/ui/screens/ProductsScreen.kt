@@ -30,7 +30,8 @@ fun ProductsScreen(
     initialCategory: String?,
     open: (Product) -> Unit,
     add: suspend (Product) -> Unit,
-    back: () -> Unit
+    back: () -> Unit,
+    categoryOptions: List<String> = emptyList()
 ) {
     var query by remember { mutableStateOf("") }
     var category by remember(initialCategory) { mutableStateOf(initialCategory) }
@@ -39,18 +40,17 @@ fun ProductsScreen(
     var priceLimit by remember { mutableFloatStateOf((products.maxOfOrNull { it.pricePerUnit } ?: 1).toFloat()) }
     var sort by remember { mutableStateOf("Relevance") }
     var sortMenu by remember { mutableStateOf(false) }
-    val categories = remember(products) { products.map(Product::category).distinct() }
+    val categories = remember(products, categoryOptions) { categoryOptions.ifEmpty { products.map(Product::category).distinct() } }
     val maxPrice = (products.maxOfOrNull { it.pricePerUnit } ?: 1).toFloat().coerceAtLeast(1f)
     val shown = products.asSequence()
         .filter { category == null || it.category == category }
-        .filter { it.name.contains(query, ignoreCase = true) || it.category.contains(query, ignoreCase = true) || it.sellerName.contains(query, ignoreCase = true) }
+        .filter { it.name.contains(query, ignoreCase = true) || it.category.contains(query, ignoreCase = true) || it.sellerName.orEmpty().contains(query, ignoreCase = true) }
         .filter { it.pricePerUnit <= priceLimit }
         .filter { !stockOnly || it.stockStatus != StockStatus.OutOfStock }
         .toList().let { filtered ->
             when (sort) {
                 "Price: low to high" -> filtered.sortedBy(Product::pricePerUnit)
                 "Price: high to low" -> filtered.sortedByDescending(Product::pricePerUnit)
-                "Top rated" -> filtered.sortedByDescending(Product::rating)
                 else -> filtered
             }
         }
@@ -85,7 +85,7 @@ fun ProductsScreen(
             Box {
                 TextButton(onClick = { sortMenu = true }) { Text("Sort: $sort") }
                 DropdownMenu(expanded = sortMenu, onDismissRequest = { sortMenu = false }) {
-                    listOf("Relevance", "Price: low to high", "Price: high to low", "Top rated").forEach { option ->
+                    listOf("Relevance", "Price: low to high", "Price: high to low").forEach { option ->
                         DropdownMenuItem(text = { Text(option) }, onClick = { sort = option; sortMenu = false })
                     }
                 }

@@ -24,7 +24,7 @@ fun SearchScreen(products: List<Product>, open: (Product) -> Unit, back: () -> U
     val results = products.filter {
         it.name.contains(query.trim(), ignoreCase = true) ||
             it.category.contains(query.trim(), ignoreCase = true) ||
-            it.sellerName.contains(query.trim(), ignoreCase = true)
+            it.sellerName.orEmpty().contains(query.trim(), ignoreCase = true)
     }
     Column(Modifier.fillMaxSize().background(NeutralBackground)) {
         Row(
@@ -70,10 +70,14 @@ fun SearchScreen(products: List<Product>, open: (Product) -> Unit, back: () -> U
                         border = androidx.compose.foundation.BorderStroke(1.dp, NeutralDivider.copy(alpha = .65f))
                     ) {
                         Row(Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
-                            ProductImage(product.imageRes, Modifier.size(76.dp), product.name)
+                            ProductImage(Modifier.size(76.dp), product.name, product.imageUrl)
                             Column(Modifier.weight(1f).padding(start = 12.dp)) {
                                 Text(product.name, style = MaterialTheme.typography.titleMedium)
-                                Text("${product.category} · ${product.sellerName}", color = TextSecondary, style = MaterialTheme.typography.bodySmall)
+                                Text(
+                                    listOfNotNull(product.category, product.sellerName?.takeIf(String::isNotBlank)).joinToString(" · "),
+                                    color = TextSecondary,
+                                    style = MaterialTheme.typography.bodySmall
+                                )
                                 Text("${formatKes(product.pricePerUnit)} / ${product.unit}", color = Green700, style = MaterialTheme.typography.titleSmall)
                             }
                         }

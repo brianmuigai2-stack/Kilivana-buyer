@@ -60,8 +60,14 @@ fun KilivanaApp(
 ) {
     val nav = rememberNavController()
     val items by cart.items.collectAsState()
+    val checkoutInProgress by cart.checkoutInProgress.collectAsState()
     val orders by ordersVm.orders.collectAsState()
+    val selectedOrder by ordersVm.selectedOrder.collectAsState()
+    val ordersLoading by ordersVm.loading.collectAsState()
+    val ordersError by ordersVm.loadError.collectAsState()
     val savedProductIds by productsVm.savedProductIds.collectAsState()
+    val products by productsVm.products.collectAsState()
+    val categories by productsVm.categories.collectAsState()
     val signedIn by auth.loggedIn.collectAsState()
     val backStack by nav.currentBackStackEntryAsState()
     val route = backStack?.destination?.route
@@ -72,6 +78,10 @@ fun KilivanaApp(
     val tabs = listOf("home", "products", "cart", "orders", "dashboard")
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
+    LaunchedEffect(products) { cart.restoreItems(products) }
+    LaunchedEffect(signedIn, auth.buyerId, auth.accessToken, products) {
+        if (signedIn && !auth.buyerId.isNullOrBlank()) ordersVm.loadForBuyer(auth.buyerId!!, auth.accessToken, products)
+    }
     Scaffold(
         containerColor = NeutralBackground,
         snackbarHost = { SnackbarHost(snackbar) },
@@ -91,13 +101,13 @@ fun KilivanaApp(
     ) { inset ->
         NavHost(nav, startDestination = "home", modifier = Modifier.padding(inset)) {
             composable("splash") { SplashScreen { nav.navigate("home") { popUpTo("splash") { inclusive = true } } } }
-            composable("home") { HomeScreen(items.sumOf { it.quantity }, productsVm.products.value, { nav.navigate("search") }, { nav.navigate("products?category=${Uri.encode(it)}") }, { nav.navigate("products") }, { nav.navigate("product/${it.id}") }, { nav.navigate("cart") }, { product -> cart.add(product); scope.launch { if (snackbar.showSnackbar("Added to cart", actionLabel = "View cart") == SnackbarResult.ActionPerformed) nav.navigate("cart") } }) }
+            composable("home") { HomeScreen(items.sumOf { it.quantity }, products, categories, { nav.navigate("search") }, { nav.navigate("products?category=${Uri.encode(it)}") }, { nav.navigate("products") }, { nav.navigate("product/${it.id}") }, { nav.navigate("cart") }, { product -> cart.add(product); scope.launch { if (snackbar.showSnackbar("Added to cart", actionLabel = "View cart") == SnackbarResult.ActionPerformed) nav.navigate("cart") } }) }
             composable("products?category={category}", arguments = listOf(navArgument("category") { type = NavType.StringType; nullable = true; defaultValue = null })) { entry ->
                 val category = entry.arguments?.getString("category")
-                ProductsScreen(productsVm.products.value, category, { nav.navigate("product/${it.id}") }, { product -> cart.add(product); scope.launch { if (snackbar.showSnackbar("Added to cart", actionLabel = "View cart") == SnackbarResult.ActionPerformed) nav.navigate("cart") } }, { nav.popBackStack() })
+                ProductsScreen(products, category, { nav.navigate("product/${it.id}") }, { product -> cart.add(product); scope.launch { if (snackbar.showSnackbar("Added to cart", actionLabel = "View cart") == SnackbarResult.ActionPerformed) nav.navigate("cart") } }, { nav.popBackStack() }, categories)
             }
             composable("cart") { CartScreen(items, cart, { if (items.isEmpty()) nav.navigate("products") else if (signedIn) nav.navigate("checkout") else nav.navigate("authRequired?returnTo=checkout&feature=checkout") { launchSingleTop = true } }) }
-            composable("orders") { if (signedIn) OrdersScreen(orders, { nav.navigate("order/${it.id}") }, { nav.navigate("products") }) else AuthenticationRequiredScreen("order history", { nav.navigate("login?returnTo=orders") }, { nav.navigate("signup?returnTo=orders") }, { nav.navigate("home") }) }
+            composable("orders") { if (signedIn) OrdersScreen(orders, { nav.navigate("order/${it.id}") }, { nav.navigate("products") }, ordersLoading, ordersError) else AuthenticationRequiredScreen("order history", { nav.navigate("login?returnTo=orders") }, { nav.navigate("signup?returnTo=orders") }, { nav.navigate("home") }) }
             composable("dashboard") {
                 AccountScreen(
                     loggedIn = signedIn,
@@ -109,10 +119,10 @@ fun KilivanaApp(
                     openSavedItems = { nav.navigate("savedItems") }
                 )
             }
-            composable("search") { SearchScreen(productsVm.products.value, { nav.navigate("product/${it.id}") }, { nav.popBackStack() }) }
+            composable("search") { SearchScreen(products, { nav.navigate("product/${it.id}") }, { nav.popBackStack() }) }
             composable("savedItems") {
                 SavedItemsScreen(
-                    products = productsVm.products.value.filter { it.id in savedProductIds },
+                    products = products.filter { it.id in savedProductIds },
                     open = { nav.navigate("product/${it.id}") },
                     add = { product ->
                         cart.add(product)
@@ -123,7 +133,7 @@ fun KilivanaApp(
                 )
             }
             composable("product/{id}", arguments = listOf(navArgument("id") { type = NavType.StringType })) { entry ->
-                val product = productsVm.products.value.firstOrNull { it.id == entry.arguments?.getString("id") }
+                val product = products.firstOrNull { it.id == entry.arguments?.getString("id") }
                 if (product != null) ProductDetailScreen(
                     product = product,
                     isSaved = product.id in savedProductIds,
@@ -139,12 +149,86 @@ fun KilivanaApp(
                 AuthenticationRequiredScreen(feature, { nav.navigate("login?returnTo=$returnTo") }, { nav.navigate("signup?returnTo=$returnTo") }, { if (feature == "checkout") nav.navigate("cart") else nav.navigate("home") })
             }
             composable("checkout") { if (signedIn) CheckoutScreen(items, {
-                scope.launch { snackbar.showSnackbar("Details are valid. Order placement will be available once Kilivana’s services are connected.") }
-            }, { nav.popBackStack() }) else AuthenticationRequiredScreen("checkout", { nav.navigate("login?returnTo=checkout") }, { nav.navigate("signup?returnTo=checkout") }, { nav.navigate("cart") }) }
+                scope.launch {
+                    val error = cart.submitCheckout(auth.accessToken)
+                    if (error == null) {
+                        cart.clear()
+                        auth.buyerId?.let { ordersVm.loadForBuyer(it, auth.accessToken, products) }
+                        snackbar.showSnackbar("Checkout completed")
+                        nav.navigate("orders") { popUpTo("home") }
+                    } else snackbar.showSnackbar(error)
+                }
+            }, { nav.popBackStack() }, checkoutInProgress) else AuthenticationRequiredScreen("checkout", { nav.navigate("login?returnTo=checkout") }, { nav.navigate("signup?returnTo=checkout") }, { nav.navigate("cart") }) }
             composable("orderConfirmation/{id}") { entry -> OrderConfirmationScreen(entry.arguments?.getString("id").orEmpty()) { nav.navigate("orders") { popUpTo("home") } } }
-            composable("order/{id}") { entry -> orders.firstOrNull { it.id == entry.arguments?.getString("id") }?.let { OrderDetailScreen(it) { it.items.forEach { line -> cart.add(line.product, line.quantity) }; nav.navigate("cart") } } }
-            composable("login?returnTo={returnTo}", arguments = listOf(navArgument("returnTo") { nullable = true; defaultValue = "home" })) { entry -> AuthScreen(false, { email, password -> if (auth.signIn(email, password)) nav.navigate(entry.arguments?.getString("returnTo") ?: "home") { popUpTo("login?returnTo={returnTo}") { inclusive = true } } else scope.launch { snackbar.showSnackbar("Sign-in is unavailable because no authentication service is configured.") } }, { nav.navigate("signup?returnTo=${entry.arguments?.getString("returnTo") ?: "home"}") }, { nav.popBackStack() }) }
-            composable("signup?returnTo={returnTo}", arguments = listOf(navArgument("returnTo") { nullable = true; defaultValue = "home" })) { entry -> AuthScreen(true, { email, password -> if (auth.signIn(email, password)) nav.navigate(entry.arguments?.getString("returnTo") ?: "home") { popUpTo("signup?returnTo={returnTo}") { inclusive = true } } else scope.launch { snackbar.showSnackbar("Account creation is unavailable because no authentication service is configured.") } }, { nav.navigate("login?returnTo=${entry.arguments?.getString("returnTo") ?: "home"}") }, { nav.popBackStack() }) }
+            composable("order/{id}") { entry ->
+                val id = entry.arguments?.getString("id").orEmpty()
+                LaunchedEffect(id, auth.accessToken, products) { if (signedIn) ordersVm.loadOrder(id, auth.accessToken, products) }
+                (selectedOrder?.takeIf { it.id == id } ?: orders.firstOrNull { it.id == id })?.let {
+                    OrderDetailScreen(it) { it.items.forEach { line -> cart.add(line.product, line.quantity) }; nav.navigate("cart") }
+                }
+            }
+            composable("login?returnTo={returnTo}", arguments = listOf(navArgument("returnTo") { nullable = true; defaultValue = "home" })) { entry ->
+                AuthScreen(
+                    signup = false,
+                    submit = { form ->
+                        val error = auth.signIn(form.email, form.password)
+                        if (error == null) nav.navigate(entry.arguments?.getString("returnTo") ?: "home") { popUpTo("login?returnTo={returnTo}") { inclusive = true } }
+                        error
+                    },
+                    forgotPassword = auth::forgotPassword,
+                    switch = { nav.navigate("signup?returnTo=${entry.arguments?.getString("returnTo") ?: "home"}") },
+                    back = { nav.popBackStack() }
+                )
+            }
+            composable("signup?returnTo={returnTo}", arguments = listOf(navArgument("returnTo") { nullable = true; defaultValue = "home" })) { entry ->
+                AuthScreen(
+                    signup = true,
+                    submit = { form ->
+                        val error = auth.register(form.name, form.email, form.phone, form.password, form.username, form.region)
+                        if (error != null) error
+                        else try {
+                            val challenge = auth.requestEmailVerification(form.email)
+                            val returnTo = entry.arguments?.getString("returnTo") ?: "home"
+                            nav.navigate("verifyEmail/${Uri.encode(form.email)}/${challenge.challengeId}/${challenge.resendAfterSeconds}/${Uri.encode(returnTo)}")
+                            null
+                        } catch (requestError: Exception) {
+                            requestError.message ?: "Could not request an email verification code."
+                        }
+                    },
+                    forgotPassword = auth::forgotPassword,
+                    switch = { nav.navigate("login?returnTo=${entry.arguments?.getString("returnTo") ?: "home"}") },
+                    back = { nav.popBackStack() }
+                )
+            }
+            composable(
+                "verifyEmail/{email}/{challengeId}/{resendAfter}/{returnTo}",
+                arguments = listOf(
+                    navArgument("email") { type = NavType.StringType },
+                    navArgument("challengeId") { type = NavType.StringType },
+                    navArgument("resendAfter") { type = NavType.IntType },
+                    navArgument("returnTo") { type = NavType.StringType }
+                )
+            ) { entry ->
+                val email = entry.arguments?.getString("email").orEmpty()
+                val challenge = EmailVerificationChallenge(
+                    challengeId = entry.arguments?.getString("challengeId").orEmpty(),
+                    expiresInSeconds = 0,
+                    resendAfterSeconds = entry.arguments?.getInt("resendAfter") ?: 0
+                )
+                val returnTo = entry.arguments?.getString("returnTo") ?: "home"
+                EmailVerificationScreen(
+                    email = email,
+                    initialChallenge = challenge,
+                    requestCode = auth::requestEmailVerification,
+                    verifyCode = auth::verifyEmail,
+                    continueToSignIn = {
+                        nav.navigate("login?returnTo=${Uri.encode(returnTo)}") {
+                            popUpTo("home")
+                        }
+                    },
+                    back = { nav.popBackStack() }
+                )
+            }
         }
     }
 }

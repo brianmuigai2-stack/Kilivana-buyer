@@ -19,7 +19,7 @@ import com.example.kilivana_buyer.model.formatKes
 import com.example.kilivana_buyer.ui.theme.*
 
 @Composable
-fun CheckoutScreen(items: List<CartItem>, place: (String) -> Unit, back: () -> Unit) {
+fun CheckoutScreen(items: List<CartItem>, place: (String) -> Unit, back: () -> Unit, submitting: Boolean = false) {
     var name by remember { mutableStateOf("") }
     var phone by remember { mutableStateOf("") }
     var town by remember { mutableStateOf("Nairobi") }
@@ -98,7 +98,7 @@ fun CheckoutScreen(items: List<CartItem>, place: (String) -> Unit, back: () -> U
             Row(Modifier.padding(14.dp)) {
                 Icon(Icons.Default.Info, contentDescription = null, tint = Green700, modifier = Modifier.padding(end = 10.dp))
                 Text(
-                    "Checkout is a preview for now. Your details will not be submitted until order and payment services are connected.",
+                    "The checkout API processes your signed-in account cart and does not accept the delivery or payment fields entered on this screen.",
                     color = Green700,
                     style = MaterialTheme.typography.bodySmall
                 )
@@ -112,8 +112,11 @@ fun CheckoutScreen(items: List<CartItem>, place: (String) -> Unit, back: () -> U
                 if (detailsValid) place("$street, $town")
             },
             Modifier.fillMaxWidth(),
-            enabled = items.isNotEmpty()
-        ) { Text("Continue (preview)") }
+            enabled = items.isNotEmpty() && !submitting
+        ) {
+            if (submitting) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+            else Text("Place order")
+        }
     }
 }
 

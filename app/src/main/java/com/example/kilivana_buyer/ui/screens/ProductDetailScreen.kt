@@ -33,7 +33,7 @@ fun ProductDetailScreen(
     Column(Modifier.fillMaxSize().background(NeutralBackground)) {
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
             Box {
-                ProductImage(product.imageRes, Modifier.fillMaxWidth())
+                ProductImage(Modifier.fillMaxWidth(), product.name, product.imageUrl)
                 Surface(
                     modifier = Modifier.align(Alignment.TopStart).padding(12.dp),
                     shape = RoundedCornerShape(50), color = NeutralSurface.copy(alpha = .95f)
@@ -57,31 +57,26 @@ fun ProductDetailScreen(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     StockBadge(product.stockStatus)
                     Spacer(Modifier.weight(1f))
-                    Icon(Icons.Default.Star, null, tint = LowStockAccent, modifier = Modifier.size(18.dp))
-                    Text("${product.rating}  ·  ${product.reviewCount} reviews", style = MaterialTheme.typography.labelLarge)
                 }
                 Text(product.name, style = MaterialTheme.typography.headlineMedium, color = TextPrimary)
                 Text("${formatKes(product.pricePerUnit)} / ${product.unit}", color = Green700, style = MaterialTheme.typography.titleLarge)
                 Text("Minimum order: ${product.minimumOrder} ${product.unit}", color = TextSecondary)
                 HorizontalDivider(color = NeutralDivider)
                 Text(product.description, style = MaterialTheme.typography.bodyLarge, color = TextPrimary)
-                Surface(shape = RoundedCornerShape(16.dp), color = NeutralSurface) {
-                    Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.Storefront, contentDescription = null, tint = Green600, modifier = Modifier.size(28.dp))
-                        Column(Modifier.weight(1f).padding(start = 12.dp)) {
-                            Text("Sold by", style = MaterialTheme.typography.labelMedium, color = TextSecondary)
-                            Text(product.sellerName, style = MaterialTheme.typography.titleMedium)
-                            Text(product.sellerLocation, style = MaterialTheme.typography.bodySmall, color = TextSecondary)
-                        }
-                        Column(horizontalAlignment = Alignment.End) {
-                            Icon(Icons.Default.Star, null, tint = LowStockAccent, modifier = Modifier.size(18.dp))
-                            Text(product.rating.toString(), style = MaterialTheme.typography.labelLarge)
+                if (!product.sellerName.isNullOrBlank() || !product.sellerLocation.isNullOrBlank()) {
+                    Surface(shape = RoundedCornerShape(16.dp), color = NeutralSurface) {
+                        Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Storefront, contentDescription = null, tint = Green600, modifier = Modifier.size(28.dp))
+                            Column(Modifier.weight(1f).padding(start = 12.dp)) {
+                                Text("Seller", style = MaterialTheme.typography.labelMedium, color = TextSecondary)
+                                product.sellerName?.let { Text(it, style = MaterialTheme.typography.titleMedium) }
+                                product.sellerLocation?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = TextSecondary) }
+                            }
                         }
                     }
                 }
-                DetailFact("Harvest", product.harvestNote ?: "Recently harvested")
+                product.harvestNote?.let { DetailFact("Harvest", it) }
                 DetailFact("Delivery", "Available delivery options shown at checkout")
-                Text("Ratings and seller details are from the current sample catalogue.", style = MaterialTheme.typography.bodySmall, color = TextSecondary)
             }
         }
         Surface(color = NeutralSurface, shadowElevation = 8.dp) {

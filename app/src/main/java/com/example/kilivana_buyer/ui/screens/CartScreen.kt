@@ -63,7 +63,7 @@ fun CartScreen(items: List<CartItem>, vm: CartViewModel, checkout: () -> Unit) {
                         Column(Modifier.fillMaxWidth().padding(14.dp)) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Box {
-                                    ProductImage(line.product.imageRes, Modifier.size(112.dp), line.product.name)
+                                    ProductImage(Modifier.size(112.dp), line.product.name, line.product.imageUrl)
                                     Surface(
                                         modifier = Modifier.padding(8.dp).align(Alignment.TopStart),
                                         shape = RoundedCornerShape(50),
@@ -74,7 +74,7 @@ fun CartScreen(items: List<CartItem>, vm: CartViewModel, checkout: () -> Unit) {
                                 }
                                 Column(Modifier.weight(1f).padding(start = 14.dp)) {
                                     Text(line.product.name, style = MaterialTheme.typography.titleLarge)
-                                    Text("From ${line.product.sellerName}", style = MaterialTheme.typography.bodySmall, color = TextSecondary)
+                                    line.product.sellerName?.let { Text("From $it", style = MaterialTheme.typography.bodySmall, color = TextSecondary) }
                                     Spacer(Modifier.height(10.dp))
                                     Text(formatKes(line.product.pricePerUnit), style = MaterialTheme.typography.titleMedium, color = Green700)
                                     Text("per ${line.product.unit}", style = MaterialTheme.typography.bodySmall, color = TextSecondary)

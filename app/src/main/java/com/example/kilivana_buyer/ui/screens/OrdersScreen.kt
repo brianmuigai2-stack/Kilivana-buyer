@@ -22,7 +22,7 @@ import com.example.kilivana_buyer.model.formatKes
 import com.example.kilivana_buyer.ui.theme.*
 
 @Composable
-fun OrdersScreen(orders: List<Order>, open: (Order) -> Unit, shop: () -> Unit) {
+fun OrdersScreen(orders: List<Order>, open: (Order) -> Unit, shop: () -> Unit, loading: Boolean = false, error: String? = null) {
     var selectedFilter by remember { mutableStateOf("All") }
     val filters = listOf("All", "Active", "Delivered", "Cancelled")
     val shown = when (selectedFilter) {
@@ -41,7 +41,17 @@ fun OrdersScreen(orders: List<Order>, open: (Order) -> Unit, shop: () -> Unit) {
                 FilterChip(selected = selectedFilter == filter, onClick = { selectedFilter = filter }, label = { Text(filter) })
             }
         }
-        if (orders.isEmpty()) {
+        if (loading && orders.isEmpty()) {
+            Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+        } else if (error != null && orders.isEmpty()) {
+            Box(Modifier.weight(1f).fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(error, color = ErrorRed)
+                    Spacer(Modifier.height(12.dp))
+                    TextButton(onClick = shop) { Text("Browse products") }
+                }
+            }
+        } else if (orders.isEmpty()) {
             Box(Modifier.weight(1f).fillMaxWidth().padding(20.dp), contentAlignment = Alignment.Center) {
                 Surface(shape = RoundedCornerShape(22.dp), color = NeutralSurface, shadowElevation = 1.dp) {
                     Column(Modifier.fillMaxWidth().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -81,7 +91,7 @@ fun OrdersScreen(orders: List<Order>, open: (Order) -> Unit, shop: () -> Unit) {
                     ) {
                         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text(order.id, Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
+                            Text(order.code, Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
                                 OrderStatusBadge(order.status)
                             }
                             Text(order.date, color = TextSecondary, style = MaterialTheme.typography.bodySmall)

@@ -21,14 +21,18 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
-import com.example.kilivana_buyer.R
+import coil.compose.AsyncImage
+import coil.request.CachePolicy
+import coil.request.ImageRequest
 import com.example.kilivana_buyer.data.CartViewModel
 import com.example.kilivana_buyer.model.*
 import com.example.kilivana_buyer.ui.theme.*
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.launch
 
 @Composable fun Modifier.horizontalScrollCompat(): Modifier = this.horizontalScroll(rememberScrollState())
@@ -39,7 +43,7 @@ import kotlinx.coroutines.launch
     val scope = rememberCoroutineScope()
     Card(modifier.padding(bottom = 12.dp).clickable { open(product) }, shape = RoundedCornerShape(16.dp), border = BorderStroke(1.dp, NeutralDivider.copy(alpha = .65f)), colors = CardDefaults.cardColors(containerColor = NeutralSurface)) {
         Column {
-            ProductImage(product.imageRes, Modifier.fillMaxWidth(), product.name)
+            ProductImage(Modifier.fillMaxWidth(), product.name, product.imageUrl)
             Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 when (product.stockStatus) {
                     StockStatus.LowStock -> Text("Limited stock", color = LowStockAccent, style = MaterialTheme.typography.labelSmall)
@@ -48,10 +52,8 @@ import kotlinx.coroutines.launch
                 }
                 Text(product.name, maxLines = 2, style = MaterialTheme.typography.titleMedium)
                 Text("${formatKes(product.pricePerUnit)} / ${product.unit}", color = Green700, style = MaterialTheme.typography.titleSmall)
-                Text(product.sellerName, maxLines = 1, style = MaterialTheme.typography.labelSmall, color = TextSecondary)
+                product.sellerName?.let { Text(it, maxLines = 1, style = MaterialTheme.typography.labelSmall, color = TextSecondary) }
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.Star, null, tint = LowStockAccent, modifier = Modifier.size(16.dp))
-                    Text("${product.rating} · ${product.reviewCount}", style = MaterialTheme.typography.labelSmall)
                     Spacer(Modifier.weight(1f))
                     FilledTonalIconButton(
                         onClick = { scope.launch { add(product) } },
@@ -63,4 +65,31 @@ import kotlinx.coroutines.launch
         }
     }
 }
-@Composable fun ProductImage(imageRes: Int, modifier: Modifier = Modifier, contentDescription: String? = null) { Image(painterResource(imageRes), contentDescription, modifier.aspectRatio(1f).clip(RoundedCornerShape(12.dp)), contentScale = ContentScale.Crop) }
+@Composable fun ProductImage(modifier: Modifier = Modifier, contentDescription: String? = null, imageUrl: String? = null) {
+    val context = LocalContext.current
+    var loading by remember(imageUrl) { mutableStateOf(!imageUrl.isNullOrBlank()) }
+    val request = remember(context, imageUrl) {
+        ImageRequest.Builder(context)
+            .data(imageUrl)
+            .addHeader("ngrok-skip-browser-warning", "1")
+            .memoryCachePolicy(CachePolicy.ENABLED)
+            .diskCachePolicy(CachePolicy.ENABLED)
+            .crossfade(true)
+            .build()
+    }
+    val imageModifier = modifier.aspectRatio(1f).clip(RoundedCornerShape(12.dp))
+    Box(imageModifier.background(NeutralSurface), contentAlignment = Alignment.Center) {
+        if (!imageUrl.isNullOrBlank()) {
+            AsyncImage(
+                model = request,
+                contentDescription = contentDescription,
+                modifier = Modifier.fillMaxSize(),
+                contentScale = ContentScale.Crop,
+                onLoading = { loading = true },
+                onSuccess = { loading = false },
+                onError = { loading = false }
+            )
+        }
+        if (loading) CircularProgressIndicator(Modifier.size(24.dp), strokeWidth = 2.dp)
+    }
+}
