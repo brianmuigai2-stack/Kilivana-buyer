@@ -15,7 +15,7 @@ android {
         targetSdk = 37
         versionCode = 1
         versionName = "1.0"
-        val apiBaseUrl = providers.gradleProperty("KILIVANA_API_BASE_URL").orElse("https://either-juvenile-progeny.ngrok-free.dev/").get()
+        val apiBaseUrl = providers.gradleProperty("KILIVANA_API_BASE_URL").orElse("https://hankering-morphing-outclass.ngrok-free.dev").get()
         buildConfigField("String", "API_BASE_URL", "\"$apiBaseUrl\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"

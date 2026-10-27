@@ -8,27 +8,39 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Info
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import com.example.kilivana_buyer.data.DeliveryAddress
+import com.example.kilivana_buyer.data.DeliveryQuote
 import com.example.kilivana_buyer.model.CartItem
-import com.example.kilivana_buyer.model.formatKes
 import com.example.kilivana_buyer.ui.theme.*
 
 @Composable
-fun CheckoutScreen(items: List<CartItem>, place: (String) -> Unit, back: () -> Unit, submitting: Boolean = false) {
-    var name by remember { mutableStateOf("") }
+fun CheckoutScreen(
+    items: List<CartItem>,
+    addresses: List<DeliveryAddress>,
+    addressesLoading: Boolean,
+    addressError: String?,
+    quote: DeliveryQuote?,
+    invalidateQuote: () -> Unit,
+    requestQuote: (Long) -> Unit,
+    manageAddresses: () -> Unit,
+    place: (String, Boolean, String) -> Unit,
+    back: () -> Unit,
+    submitting: Boolean = false
+) {
     var phone by remember { mutableStateOf("") }
-    var town by remember { mutableStateOf("Nairobi") }
-    var street by remember { mutableStateOf("") }
+    var selectedAddressId by remember(addresses) {
+        mutableStateOf(addresses.firstOrNull()?.id)
+    }
+    var addressMenuExpanded by remember { mutableStateOf(false) }
     var payment by remember { mutableStateOf("M-Pesa") }
-    var deliveryWindow by remember { mutableStateOf("Morning · 8 am–12 pm") }
-    var submitted by remember { mutableStateOf(false) }
     val validPhone = phone.matches(Regex("^(?:07|01)\\d{8}$|^\\+254\\d{9}$"))
-    val total = items.sumOf { it.quantity * it.product.pricePerUnit }
+    val activeQuote = quote?.takeIf { it.addressId == selectedAddressId }
 
     Column(
         Modifier.fillMaxSize().background(NeutralBackground).imePadding().verticalScroll(rememberScrollState()).padding(16.dp),
@@ -42,81 +54,84 @@ fun CheckoutScreen(items: List<CartItem>, place: (String) -> Unit, back: () -> U
         }
         Text("Delivery and payment details", style = MaterialTheme.typography.bodyLarge, color = TextSecondary)
 
-        CheckoutSection("Contact") {
-            OutlinedTextField(name, { name = it }, Modifier.fillMaxWidth(), label = { Text("Full name") }, singleLine = true, isError = submitted && name.isBlank())
+        CheckoutSection("Phone number") {
             OutlinedTextField(
-                phone, { phone = it }, Modifier.fillMaxWidth(), label = { Text("Phone number") },
+                phone, { phone = it }, Modifier.fillMaxWidth(), label = { Text("Kenyan mobile number") },
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone), singleLine = true,
-                isError = (phone.isNotEmpty() && !validPhone) || (submitted && !validPhone),
-                supportingText = { if ((phone.isNotEmpty() || submitted) && !validPhone) Text("Enter a valid Kenyan number") }
+                isError = phone.isNotEmpty() && !validPhone,
+                supportingText = { if (!validPhone) Text("Enter a valid Kenyan number") }
             )
         }
 
         CheckoutSection("Delivery address") {
-            OutlinedTextField(town, { town = it }, Modifier.fillMaxWidth(), label = { Text("Town or area") }, singleLine = true, isError = submitted && town.isBlank())
-            OutlinedTextField(street, { street = it }, Modifier.fillMaxWidth(), label = { Text("Street, estate, or landmark") }, minLines = 2, isError = submitted && street.isBlank())
-            Text("Preferred delivery window", style = MaterialTheme.typography.titleSmall)
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                listOf("Morning · 8 am–12 pm", "Afternoon · 12 pm–5 pm", "Evening · 5 pm–8 pm").forEach { slot ->
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        Text(slot, Modifier.weight(1f))
-                        RadioButton(selected = deliveryWindow == slot, onClick = { deliveryWindow = slot })
+            when {
+                addressesLoading -> CircularProgressIndicator(Modifier.align(Alignment.CenterHorizontally))
+                addresses.isEmpty() -> {
+                    Text(addressError ?: "No saved delivery addresses yet.", color = if (addressError != null) ErrorRed else TextSecondary)
+                    OutlinedButton(onClick = manageAddresses, modifier = Modifier.fillMaxWidth()) { Text("Add delivery address") }
+                }
+                else -> {
+                    Box {
+                        OutlinedButton(onClick = { addressMenuExpanded = true }, modifier = Modifier.fillMaxWidth()) {
+                            Text(addresses.firstOrNull { it.id == selectedAddressId }?.label ?: "Select delivery address")
+                        }
+                        DropdownMenu(expanded = addressMenuExpanded, onDismissRequest = { addressMenuExpanded = false }) {
+                            addresses.forEach { address ->
+                                DropdownMenuItem(
+                                    text = { Text(address.label) },
+                                    onClick = {
+                                        if (selectedAddressId != address.id) invalidateQuote()
+                                        selectedAddressId = address.id
+                                        addressMenuExpanded = false
+                                    }
+                                )
+                            }
+                        }
                     }
                 }
             }
+            if (addresses.isNotEmpty()) {
+                TextButton(onClick = manageAddresses, modifier = Modifier.align(Alignment.End)) { Text("Manage addresses") }
+            }
+            Button(
+                onClick = { selectedAddressId?.let(requestQuote) },
+                modifier = Modifier.fillMaxWidth(),
+                enabled = selectedAddressId != null && !addressesLoading && !submitting && validPhone
+            ) { Text(if (submitting && activeQuote == null) "Calculating delivery…" else "Calculate delivery") }
         }
 
-        CheckoutSection("Payment method") {
-            listOf("M-Pesa", "Cash on delivery").forEach { method ->
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    Text(method, Modifier.weight(1f))
-                    RadioButton(selected = payment == method, onClick = { payment = method })
+        activeQuote?.let { deliveryQuote ->
+            CheckoutSection("Order summary") {
+                items.forEach { line ->
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text("${line.quantity} × ${line.product.name}", Modifier.weight(1f))
+                    }
+                }
+                HorizontalDivider(color = NeutralDivider)
+                SummaryLine("Items subtotal", "${deliveryQuote.currency} ${"%.2f".format(deliveryQuote.subtotal)}")
+                SummaryLine("Delivery", "${deliveryQuote.currency} ${"%.2f".format(deliveryQuote.deliveryFee)}")
+                SummaryLine("Total", "${deliveryQuote.currency} ${"%.2f".format(deliveryQuote.total)}", emphasize = true)
+            }
+
+            CheckoutSection("Payment method") {
+                listOf("M-Pesa", "Cash on delivery").forEach { method ->
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text(method, Modifier.weight(1f))
+                        RadioButton(selected = payment == method, onClick = { payment = method })
+                    }
                 }
             }
-            if (payment == "M-Pesa") {
-                OutlinedTextField(
-                    phone, { phone = it }, Modifier.fillMaxWidth(), label = { Text("M-Pesa phone number") },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone), singleLine = true
-                )
+            Button(
+                onClick = { place(deliveryQuote.quoteId, payment == "M-Pesa", phone) },
+                modifier = Modifier.fillMaxWidth(),
+                enabled = !submitting && validPhone
+            ) {
+                if (submitting) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                else Text(if (payment == "M-Pesa") "Create order and pay" else "Place order")
             }
         }
 
-        CheckoutSection("Order summary") {
-            items.forEach { line ->
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    Text("${line.quantity} × ${line.product.name}", Modifier.weight(1f))
-                    Text(formatKes(line.quantity * line.product.pricePerUnit))
-                }
-            }
-            HorizontalDivider(color = NeutralDivider)
-            SummaryLine("Items subtotal", formatKes(total))
-            SummaryLine("Delivery", "Calculated when service is available")
-            SummaryLine("Total before delivery", formatKes(total), emphasize = true)
-        }
-
-        Surface(shape = RoundedCornerShape(14.dp), color = Green50) {
-            Row(Modifier.padding(14.dp)) {
-                Icon(Icons.Default.Info, contentDescription = null, tint = Green700, modifier = Modifier.padding(end = 10.dp))
-                Text(
-                    "The checkout API processes your signed-in account cart and does not accept the delivery or payment fields entered on this screen.",
-                    color = Green700,
-                    style = MaterialTheme.typography.bodySmall
-                )
-            }
-        }
-        if (submitted) Text("Please check your name, Kenyan phone number, and delivery address.", color = ErrorRed)
-        Button(
-            onClick = {
-                val detailsValid = name.isNotBlank() && validPhone && town.isNotBlank() && street.isNotBlank()
-                submitted = !detailsValid
-                if (detailsValid) place("$street, $town")
-            },
-            Modifier.fillMaxWidth(),
-            enabled = items.isNotEmpty() && !submitting
-        ) {
-            if (submitting) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
-            else Text("Place order")
-        }
+        if (items.isEmpty()) Text("Your cart is empty.", color = TextSecondary)
     }
 }
 

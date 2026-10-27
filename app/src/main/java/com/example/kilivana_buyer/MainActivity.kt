@@ -111,12 +111,36 @@ fun KilivanaApp(
             composable("dashboard") {
                 AccountScreen(
                     loggedIn = signedIn,
+                    name = auth.name,
+                    email = auth.email,
+                    phone = auth.phone,
                     orders = orders,
                     login = { nav.navigate("login?returnTo=dashboard") },
                     logout = { auth.signOut() },
                     createAccount = { nav.navigate("signup?returnTo=dashboard") },
                     openOrders = { nav.navigate("orders") },
-                    openSavedItems = { nav.navigate("savedItems") }
+                    openSavedItems = { nav.navigate("savedItems") },
+                    openAddresses = { nav.navigate("addresses") }
+                )
+            }
+            composable("addresses") {
+                if (signedIn) {
+                    LaunchedEffect(auth.accessToken) { cart.loadAddresses(auth.accessToken) }
+                    AddressBookScreen(
+                        addresses = cart.addresses.collectAsState().value,
+                        userId = auth.buyerId,
+                        loading = cart.addressesLoading.collectAsState().value,
+                        save = { addressId, userId, label, addressText, latitude, longitude ->
+                            cart.saveAddress(addressId, userId, label, addressText, latitude, longitude, auth.accessToken)
+                        },
+                        delete = { addressId -> cart.deleteAddress(addressId, auth.accessToken) },
+                        back = { nav.popBackStack() }
+                    )
+                } else AuthenticationRequiredScreen(
+                    "delivery addresses",
+                    { nav.navigate("login?returnTo=dashboard") },
+                    { nav.navigate("signup?returnTo=dashboard") },
+                    { nav.popBackStack() }
                 )
             }
             composable("search") { SearchScreen(products, { nav.navigate("product/${it.id}") }, { nav.popBackStack() }) }
@@ -148,17 +172,57 @@ fun KilivanaApp(
                 val feature = entry.arguments?.getString("feature") ?: "checkout"
                 AuthenticationRequiredScreen(feature, { nav.navigate("login?returnTo=$returnTo") }, { nav.navigate("signup?returnTo=$returnTo") }, { if (feature == "checkout") nav.navigate("cart") else nav.navigate("home") })
             }
-            composable("checkout") { if (signedIn) CheckoutScreen(items, {
-                scope.launch {
-                    val error = cart.submitCheckout(auth.accessToken)
-                    if (error == null) {
-                        cart.clear()
-                        auth.buyerId?.let { ordersVm.loadForBuyer(it, auth.accessToken, products) }
-                        snackbar.showSnackbar("Checkout completed")
-                        nav.navigate("orders") { popUpTo("home") }
-                    } else snackbar.showSnackbar(error)
-                }
-            }, { nav.popBackStack() }, checkoutInProgress) else AuthenticationRequiredScreen("checkout", { nav.navigate("login?returnTo=checkout") }, { nav.navigate("signup?returnTo=checkout") }, { nav.navigate("cart") }) }
+            composable("checkout") {
+                if (signedIn) {
+                    LaunchedEffect(signedIn, auth.accessToken) { cart.loadAddresses(auth.accessToken) }
+                    CheckoutScreen(
+                        items = items,
+                        addresses = cart.addresses.collectAsState().value,
+                        addressesLoading = cart.addressesLoading.collectAsState().value,
+                        addressError = cart.addressError.collectAsState().value,
+                        quote = cart.deliveryQuote.collectAsState().value,
+                        invalidateQuote = cart::clearDeliveryQuote,
+                        manageAddresses = { nav.navigate("addresses") },
+                        requestQuote = { addressId ->
+                            scope.launch {
+                                cart.requestDeliveryQuote(addressId, auth.accessToken)?.let { snackbar.showSnackbar(it) }
+                            }
+                        },
+                        place = { quoteId, useMpesa, phoneNumber ->
+                            scope.launch {
+                                val submission = cart.submitCheckout(auth.accessToken, quoteId, useMpesa, phoneNumber)
+                                val orderId = submission.orderId
+                                if (orderId == null) {
+                                    submission.error?.let { snackbar.showSnackbar(it) }
+                                } else {
+                                    cart.clear()
+                                    auth.buyerId?.let { ordersVm.loadForBuyer(it, auth.accessToken, products) }
+                                    if (submission.paymentId != null) {
+                                        nav.navigate("paymentStatus/${submission.paymentId}/$orderId") { popUpTo("home") }
+                                    } else {
+                                        submission.error?.let { snackbar.showSnackbar("Order $orderId created, but $it") }
+                                        nav.navigate("orderConfirmation/$orderId") { popUpTo("home") }
+                                    }
+                                }
+                            }
+                        },
+                        back = { nav.popBackStack() },
+                        submitting = checkoutInProgress
+                    )
+                } else AuthenticationRequiredScreen("checkout", { nav.navigate("login?returnTo=checkout") }, { nav.navigate("signup?returnTo=checkout") }, { nav.navigate("cart") })
+            }
+            composable(
+                "paymentStatus/{paymentId}/{orderId}",
+                arguments = listOf(navArgument("paymentId") { type = NavType.LongType }, navArgument("orderId") { type = NavType.LongType })
+            ) { entry ->
+                PaymentStatusScreen(
+                    paymentId = entry.arguments?.getLong("paymentId") ?: 0L,
+                    orderId = entry.arguments?.getLong("orderId") ?: 0L,
+                    accessToken = auth.accessToken,
+                    loadStatus = cart::getPaymentStatus,
+                    continueShopping = { nav.navigate("orders") { popUpTo("home") } }
+                )
+            }
             composable("orderConfirmation/{id}") { entry -> OrderConfirmationScreen(entry.arguments?.getString("id").orEmpty()) { nav.navigate("orders") { popUpTo("home") } } }
             composable("order/{id}") { entry ->
                 val id = entry.arguments?.getString("id").orEmpty()

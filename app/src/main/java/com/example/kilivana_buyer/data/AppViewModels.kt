@@ -17,8 +17,61 @@ class CartViewModel(application: Application) : AndroidViewModel(application) {
     val subtotal get() = _items.value.sumOf { it.quantity * it.product.pricePerUnit }
     private val preferences = application.getSharedPreferences("kilivana_guest_cart", Application.MODE_PRIVATE)
     private val checkoutRepository = ApiCheckoutRepository()
+    private val paymentRepository = ApiPaymentRepository()
     private var cartRestored = false
+    private var checkoutLocked = false
     val checkoutInProgress = MutableStateFlow(false)
+    val addresses = MutableStateFlow<List<DeliveryAddress>>(emptyList())
+    val addressesLoading = MutableStateFlow(false)
+    val addressError = MutableStateFlow<String?>(null)
+    val deliveryQuote = MutableStateFlow<DeliveryQuote?>(null)
+
+    suspend fun loadAddresses(accessToken: String?) {
+        addressesLoading.value = true
+        addressError.value = null
+        try { addresses.value = checkoutRepository.getAddresses(accessToken) }
+        catch (error: Exception) { addressError.value = error.message ?: "Could not load saved addresses." }
+        finally { addressesLoading.value = false }
+    }
+
+    suspend fun saveAddress(
+        addressId: Long?, userId: String?, label: String, addressText: String,
+        latitude: Double, longitude: Double, accessToken: String?
+    ): String? {
+        val ownerId = userId?.toLongOrNull() ?: return "Your profile is missing a user ID. Please sign in again."
+        return try {
+            val saved = checkoutRepository.saveAddress(addressId, ownerId, label, addressText, latitude, longitude, accessToken)
+            addresses.value = addresses.value.filterNot { it.id == saved.id } + saved
+            deliveryQuote.value = null
+            null
+        } catch (error: Exception) { error.message ?: "Could not save address." }
+    }
+
+    suspend fun deleteAddress(addressId: Long, accessToken: String?): String? {
+        return try {
+            checkoutRepository.deleteAddress(addressId, accessToken)
+            addresses.value = addresses.value.filterNot { it.id == addressId }
+            deliveryQuote.value = null
+            null
+        } catch (error: Exception) { error.message ?: "Could not delete address." }
+    }
+
+    suspend fun requestDeliveryQuote(addressId: Long, accessToken: String?): String? {
+        checkoutInProgress.value = true
+        deliveryQuote.value = null
+        return try {
+            if (!checkoutLocked) {
+                checkoutRepository.checkout(_items.value, accessToken)
+                checkoutLocked = true
+            }
+            deliveryQuote.value = checkoutRepository.requestDeliveryQuote(addressId, accessToken)
+            null
+        } catch (error: Exception) {
+            error.message ?: "Could not calculate delivery. Please try again."
+        } finally { checkoutInProgress.value = false }
+    }
+
+    fun clearDeliveryQuote() { deliveryQuote.value = null }
 
     fun restoreItems(products: List<Product>) {
         if (cartRestored || products.isEmpty()) return
@@ -47,17 +100,30 @@ class CartViewModel(application: Application) : AndroidViewModel(application) {
         if (it.product.id == id && it.quantity > it.product.minimumOrder) it.copy(quantity = it.quantity - 1) else it
     })
     fun remove(id: String) = updateItems(_items.value.filterNot { it.product.id == id })
-    fun clear() = updateItems(emptyList())
+    fun clear() {
+        checkoutLocked = false
+        deliveryQuote.value = null
+        updateItems(emptyList())
+    }
 
-    suspend fun submitCheckout(accessToken: String?): String? {
+    suspend fun submitCheckout(accessToken: String?, quoteId: String, useMpesa: Boolean, phoneNumber: String): CheckoutSubmission {
         checkoutInProgress.value = true
         return try {
-            checkoutRepository.checkout(_items.value, accessToken)
-            null
+            val order = checkoutRepository.createOrder(quoteId, phoneNumber, accessToken)
+            if (!useMpesa) CheckoutSubmission(orderId = order.id)
+            else try {
+                val payment = paymentRepository.initiateBuyerStkPush(order.id, phoneNumber, accessToken)
+                CheckoutSubmission(order.id, payment.paymentId, payment.customerMessage)
+            } catch (error: Exception) {
+                CheckoutSubmission(orderId = order.id, error = error.message ?: "Could not start M-PESA payment.")
+            }
         } catch (error: Exception) {
-            error.message ?: "Checkout failed. Please try again."
+            CheckoutSubmission(error = error.message ?: "Checkout failed. Please try again.")
         } finally { checkoutInProgress.value = false }
     }
+
+    suspend fun getPaymentStatus(paymentId: Long, accessToken: String?) =
+        paymentRepository.getStatus(paymentId, accessToken)
 
     private fun updateItems(items: List<CartItem>) {
         _items.value = items
@@ -120,6 +186,9 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
     private val _loggedIn=MutableStateFlow(repository.isLoggedIn())
     val loggedIn: StateFlow<Boolean> = _loggedIn.asStateFlow()
     val buyerId: String? get() = repository.currentBuyerId()
+    val name: String? get() = repository.currentName()
+    val email: String? get() = repository.currentEmail()
+    val phone: String? get() = repository.currentPhone()
     val accessToken: String? get() = repository.accessToken()
     init { viewModelScope.launch { _loggedIn.value = repository.refreshSession() } }
     suspend fun signIn(email: String, password: String): String? {

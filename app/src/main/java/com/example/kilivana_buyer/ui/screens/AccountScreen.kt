@@ -20,12 +20,16 @@ import com.example.kilivana_buyer.ui.theme.*
 @Composable
 fun AccountScreen(
     loggedIn: Boolean,
+    name: String?,
+    email: String?,
+    phone: String?,
     orders: List<Order>,
     login: () -> Unit,
     logout: () -> Unit,
     createAccount: () -> Unit,
     openOrders: () -> Unit,
-    openSavedItems: () -> Unit
+    openSavedItems: () -> Unit,
+    openAddresses: () -> Unit
 ) {
     LazyColumn(
         Modifier.fillMaxSize().background(NeutralBackground),
@@ -77,11 +81,14 @@ fun AccountScreen(
                 Surface(shape = RoundedCornerShape(18.dp), color = NeutralSurface, modifier = Modifier.fillMaxWidth()) {
                     Row(Modifier.padding(18.dp), verticalAlignment = Alignment.CenterVertically) {
                         Surface(Modifier.size(56.dp), shape = CircleShape, color = Green50) {
-                            Box(contentAlignment = Alignment.Center) { Text("KB", style = MaterialTheme.typography.titleLarge, color = Green700) }
+                            Box(contentAlignment = Alignment.Center) {
+                                Text(name?.trim()?.split(" ")?.mapNotNull(String::firstOrNull)?.take(2)?.joinToString("")?.uppercase().orEmpty().ifBlank { "?" }, style = MaterialTheme.typography.titleLarge, color = Green700)
+                            }
                         }
                         Column(Modifier.padding(start = 14.dp)) {
-                            Text("Kilivana buyer", style = MaterialTheme.typography.titleLarge)
-                            Text("Manage your account and preferences", color = TextSecondary)
+                            Text(name?.takeIf(String::isNotBlank) ?: "Your account", style = MaterialTheme.typography.titleLarge)
+                            email?.let { Text(it, color = TextSecondary) }
+                            phone?.let { Text(it, color = TextSecondary) }
                         }
                     }
                 }
@@ -99,9 +106,9 @@ fun AccountScreen(
                 Surface(shape = RoundedCornerShape(18.dp), color = NeutralSurface, modifier = Modifier.fillMaxWidth()) {
                     Column {
                         listOf("My orders", "Saved items", "Addresses", "Payment methods", "Notifications", "Help and support", "About").forEach { label ->
-                            val actionable = label == "My orders" || label == "Saved items"
+                            val actionable = label == "My orders" || label == "Saved items" || label == "Addresses"
                             TextButton(
-                                onClick = { when (label) { "My orders" -> openOrders(); "Saved items" -> openSavedItems() } },
+                                onClick = { when (label) { "My orders" -> openOrders(); "Saved items" -> openSavedItems(); "Addresses" -> openAddresses() } },
                                 enabled = actionable,
                                 modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp)
                             ) {

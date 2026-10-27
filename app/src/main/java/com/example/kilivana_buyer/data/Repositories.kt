@@ -22,11 +22,26 @@ interface OrderRepository {
     suspend fun getTimeline(id: String, accessToken: String?): List<OrderEvent>
 }
 interface CheckoutRepository {
-    suspend fun checkout(items: List<CartItem>, accessToken: String?): String
+    suspend fun getAddresses(accessToken: String?): List<DeliveryAddress>
+    suspend fun saveAddress(
+        addressId: Long?, userId: Long, label: String, addressText: String,
+        latitude: Double, longitude: Double, accessToken: String?
+    ): DeliveryAddress
+    suspend fun deleteAddress(addressId: Long, accessToken: String?)
+    suspend fun checkout(items: List<CartItem>, accessToken: String?)
+    suspend fun requestDeliveryQuote(addressId: Long, accessToken: String?): DeliveryQuote
+    suspend fun createOrder(quoteId: String, phoneNumber: String, accessToken: String?): CheckoutOrder
+}
+interface PaymentRepository {
+    suspend fun initiateBuyerStkPush(orderId: Long, phoneNumber: String, accessToken: String?): StkPushResult
+    suspend fun getStatus(paymentId: Long, accessToken: String?): PaymentStatus
 }
 interface AuthRepository {
     fun isLoggedIn(): Boolean
     fun currentBuyerId(): String?
+    fun currentName(): String?
+    fun currentEmail(): String?
+    fun currentPhone(): String?
     fun accessToken(): String?
     suspend fun signIn(email: String, password: String): String?
     suspend fun register(name: String, email: String, phone: String, password: String, username: String, region: String): String?
@@ -43,10 +58,40 @@ data class EmailVerificationChallenge(
     val resendAfterSeconds: Int
 )
 
+data class CheckoutOrder(val id: Long, val message: String)
+data class DeliveryAddress(
+    val id: Long,
+    val userId: Long,
+    val addressText: String,
+    val latitude: Double,
+    val longitude: Double,
+    val label: String
+)
+data class DeliveryQuote(
+    val quoteId: String,
+    val addressId: Long,
+    val subtotal: Double,
+    val deliveryFee: Double,
+    val total: Double,
+    val currency: String,
+    val expiresAt: String
+)
+data class StkPushResult(val paymentId: Long, val status: String, val customerMessage: String?)
+data class PaymentStatus(val status: String, val amount: Double, val reference: String?)
+data class CheckoutSubmission(
+    val orderId: Long? = null,
+    val paymentId: Long? = null,
+    val paymentMessage: String? = null,
+    val error: String? = null
+)
+
 class ApiAuthRepository(context: Context, private val baseUrl: String = BuildConfig.API_BASE_URL) : AuthRepository {
     private val preferences = context.getSharedPreferences("kilivana_auth", Context.MODE_PRIVATE)
     override fun isLoggedIn() = !accessToken().isNullOrBlank() && !currentBuyerId().isNullOrBlank()
     override fun currentBuyerId() = preferences.getString("buyer_id", null)
+    override fun currentName() = preferences.getString("name", null)
+    override fun currentEmail() = preferences.getString("email", null)
+    override fun currentPhone() = preferences.getString("phone", null)
     override fun accessToken() = preferences.getString("access_token", null)
     private fun refreshToken() = preferences.getString("refresh_token", null)
 
@@ -131,7 +176,10 @@ class ApiAuthRepository(context: Context, private val baseUrl: String = BuildCon
             error("This account is not a buyer account.")
         }
         preferences.edit().putString("buyer_id", user.optLong("id").toString())
-            .putString("name", user.optString("name")).putString("email", user.optString("email")).apply()
+            .putString("name", user.optString("name").takeIf(String::isNotBlank))
+            .putString("email", user.optString("email").takeIf(String::isNotBlank))
+            .putString("phone", user.optString("phone").ifBlank { user.optString("phoneNumber") }.takeIf(String::isNotBlank))
+            .apply()
     }
 
     private fun saveSession(data: JSONObject) {
@@ -323,7 +371,57 @@ class ApiOrderRepository(private val baseUrl: String = BuildConfig.API_BASE_URL)
 }
 
 class ApiCheckoutRepository(private val baseUrl: String = BuildConfig.API_BASE_URL) : CheckoutRepository {
-    override suspend fun checkout(items: List<CartItem>, accessToken: String?): String = withContext(Dispatchers.IO) {
+    override suspend fun getAddresses(accessToken: String?): List<DeliveryAddress> = withContext(Dispatchers.IO) {
+        val token = accessToken?.takeIf(String::isNotBlank) ?: error("Sign in to load your saved addresses.")
+        val response = request("/api/v1/users/addresses", "GET", token)
+        val data = response.optJSONArray("data")
+            ?: response.optJSONObject("data")?.optJSONArray("content")
+            ?: error("Address response has no data list.")
+        (0 until data.length()).mapNotNull { index ->
+            val address = data.optJSONObject(index) ?: return@mapNotNull null
+            val id = address.optLong("id").takeIf { it > 0 } ?: return@mapNotNull null
+            DeliveryAddress(
+                id = id,
+                userId = address.optLong("userId"),
+                addressText = address.optString("addressText"),
+                latitude = address.optDouble("latitude", 0.0),
+                longitude = address.optDouble("longitude", 0.0),
+                label = address.optString("label").ifBlank { "Address $id" }
+            )
+        }
+    }
+
+    override suspend fun saveAddress(
+        addressId: Long?, userId: Long, label: String, addressText: String,
+        latitude: Double, longitude: Double, accessToken: String?
+    ): DeliveryAddress = withContext(Dispatchers.IO) {
+        val token = accessToken?.takeIf(String::isNotBlank) ?: error("Sign in to save an address.")
+        val payload = JSONObject()
+            .put("addressText", addressText)
+            .put("latitude", latitude)
+            .put("longitude", longitude)
+            .put("label", label)
+            .put("userId", userId)
+        val path = if (addressId == null) "/api/v1/users/addresses" else "/api/v1/users/addresses/$addressId"
+        val response = request(path, if (addressId == null) "POST" else "PUT", token, payload)
+        val data = response.optJSONObject("data") ?: error("Address response has no data.")
+        DeliveryAddress(
+            id = data.optLong("id").takeIf { it > 0 } ?: error("Address response has no ID."),
+            userId = data.optLong("userId", userId),
+            addressText = data.optString("addressText", addressText),
+            latitude = data.optDouble("latitude", latitude),
+            longitude = data.optDouble("longitude", longitude),
+            label = data.optString("label", label)
+        )
+    }
+
+    override suspend fun deleteAddress(addressId: Long, accessToken: String?) = withContext(Dispatchers.IO) {
+        val token = accessToken?.takeIf(String::isNotBlank) ?: error("Sign in to delete an address.")
+        request("/api/v1/users/addresses/$addressId", "DELETE", token)
+        Unit
+    }
+
+    override suspend fun checkout(items: List<CartItem>, accessToken: String?) = withContext(Dispatchers.IO) {
         require(!accessToken.isNullOrBlank()) { "Sign in to continue checkout." }
         require(items.isNotEmpty()) { "Your cart is empty." }
         items.forEach { line ->
@@ -331,9 +429,49 @@ class ApiCheckoutRepository(private val baseUrl: String = BuildConfig.API_BASE_U
             val item = JSONObject().put("productId", productId).put("quantity", line.quantity)
             request("/api/v1/cart/items", "POST", accessToken, item)
         }
-        request("/api/v1/checkout/validate", "POST", accessToken)
-        val response = request("/api/v1/checkout", "POST", accessToken)
-        response.optString("message").ifBlank { "Checkout completed." }
+        request("/api/v1/checkout", "POST", accessToken)
+        Unit
+    }
+
+    override suspend fun requestDeliveryQuote(addressId: Long, accessToken: String?): DeliveryQuote = withContext(Dispatchers.IO) {
+        val token = accessToken?.takeIf(String::isNotBlank) ?: error("Sign in to request a delivery quote.")
+        val response = request(
+            "/api/v1/checkout/delivery-quote",
+            "POST",
+            token,
+            JSONObject().put("addressId", addressId)
+        )
+        val data = response.optJSONObject("data") ?: error("Delivery quote response has no data.")
+        DeliveryQuote(
+            quoteId = data.optString("quoteId").takeIf(String::isNotBlank) ?: error("Delivery quote has no ID."),
+            addressId = data.optLong("addressId", addressId),
+            subtotal = data.optDouble("subtotal", 0.0),
+            deliveryFee = data.optDouble("deliveryFee", 0.0),
+            total = data.optDouble("total", 0.0),
+            currency = data.optString("currency").ifBlank { "KES" },
+            expiresAt = data.optString("expiresAt")
+        )
+    }
+
+    override suspend fun createOrder(quoteId: String, phoneNumber: String, accessToken: String?): CheckoutOrder = withContext(Dispatchers.IO) {
+        val token = accessToken?.takeIf(String::isNotBlank) ?: error("Sign in to create an order.")
+        val response = request(
+            "/api/v1/checkout/order",
+            "POST",
+            token,
+            JSONObject().put("quoteId", quoteId).put("phoneNumber", normalizeKenyanPhone(phoneNumber))
+        )
+        val data = response.opt("data")
+        val orderId = when (data) {
+            is Number -> data.toLong()
+            is JSONObject -> when {
+                data.has("id") -> data.optLong("id")
+                data.has("orderId") -> data.optLong("orderId")
+                else -> response.optLong("orderId")
+            }
+            else -> response.optLong("orderId")
+        }.takeIf { it > 0 } ?: error("Order response has no order ID.")
+        CheckoutOrder(orderId, response.optString("message").ifBlank { "Order created." })
     }
 
     private fun request(path: String, method: String, token: String, payload: JSONObject? = null): JSONObject {
@@ -361,4 +499,68 @@ class ApiCheckoutRepository(private val baseUrl: String = BuildConfig.API_BASE_U
             return response
         } finally { connection.disconnect() }
     }
+}
+
+class ApiPaymentRepository(private val baseUrl: String = BuildConfig.API_BASE_URL) : PaymentRepository {
+    override suspend fun initiateBuyerStkPush(
+        orderId: Long,
+        phoneNumber: String,
+        accessToken: String?
+    ): StkPushResult = withContext(Dispatchers.IO) {
+        val token = accessToken?.takeIf(String::isNotBlank) ?: error("Sign in to start M-PESA payment.")
+        val phone = normalizeKenyanPhone(phoneNumber)
+        val data = request(
+            "/api/v1/payments/stk-push/buyer",
+            "POST",
+            token,
+            JSONObject().put("orderId", orderId).put("phoneNumber", phone)
+        ).getJSONObject("data")
+        StkPushResult(
+            paymentId = data.optLong("paymentId").takeIf { it > 0 } ?: error("Payment response has no payment ID."),
+            status = data.optString("status", "PENDING"),
+            customerMessage = data.optJSONObject("darajaResponse")?.optString("customerMessage")?.takeIf(String::isNotBlank)
+        )
+    }
+
+    override suspend fun getStatus(paymentId: Long, accessToken: String?): PaymentStatus = withContext(Dispatchers.IO) {
+        val token = accessToken?.takeIf(String::isNotBlank) ?: error("Sign in to check payment status.")
+        val data = request("/api/v1/payments/$paymentId/status", "GET", token).getJSONObject("data")
+        PaymentStatus(
+            status = data.optString("status").ifBlank { "UNKNOWN" },
+            amount = data.optDouble("amount", 0.0),
+            reference = data.optString("reference").takeIf(String::isNotBlank)
+        )
+    }
+
+    private fun request(path: String, method: String, token: String, payload: JSONObject? = null): JSONObject {
+        val connection = URL(baseUrl.trimEnd('/') + path).openConnection() as HttpURLConnection
+        try {
+            connection.requestMethod = method
+            connection.connectTimeout = 15_000
+            connection.readTimeout = 20_000
+            connection.setRequestProperty("Accept", "application/json")
+            connection.setRequestProperty("ngrok-skip-browser-warning", "1")
+            connection.setRequestProperty("Authorization", "Bearer $token")
+            if (payload != null) {
+                connection.doOutput = true
+                connection.setRequestProperty("Content-Type", "application/json")
+                connection.outputStream.bufferedWriter(Charsets.UTF_8).use { it.write(payload.toString()) }
+            }
+            val status = connection.responseCode
+            val body = (if (status in 200..299) connection.inputStream else connection.errorStream)
+                ?.bufferedReader()?.use { it.readText() }.orEmpty()
+            val response = runCatching { JSONObject(body) }.getOrDefault(JSONObject())
+            if (status !in 200..299) {
+                error(response.optString("message").ifBlank { "Payment request failed (HTTP $status)." })
+            }
+            return response
+        } finally { connection.disconnect() }
+    }
+}
+
+private fun normalizeKenyanPhone(phoneNumber: String): String {
+    val digits = phoneNumber.filter(Char::isDigit)
+    val normalized = if (digits.startsWith("0")) "254${digits.drop(1)}" else digits
+    require(normalized.matches(Regex("^254(?:7|1)\\d{8}$"))) { "Enter a valid Kenyan M-PESA number." }
+    return normalized
 }
