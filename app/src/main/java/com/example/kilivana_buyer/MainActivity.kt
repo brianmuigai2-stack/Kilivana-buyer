@@ -251,6 +251,7 @@ fun KilivanaApp(
                         val error = auth.register(form.name, form.email, form.phone, form.password, form.username, form.region)
                         if (error != null) error
                         else try {
+                            auth.pendingPassword = form.password
                             val challenge = auth.requestEmailVerification(form.email)
                             val returnTo = entry.arguments?.getString("returnTo") ?: "home"
                             nav.navigate("verifyEmail/${Uri.encode(form.email)}/${challenge.challengeId}/${challenge.resendAfterSeconds}/${Uri.encode(returnTo)}")
@@ -286,11 +287,17 @@ fun KilivanaApp(
                     requestCode = auth::requestEmailVerification,
                     verifyCode = auth::verifyEmail,
                     continueToSignIn = {
-                        nav.navigate("login?returnTo=${Uri.encode(returnTo)}") {
-                            popUpTo("home")
-                        }
+                        nav.navigate(returnTo) { popUpTo("home") { inclusive = true } }
                     },
-                    back = { nav.popBackStack() }
+                    back = { nav.popBackStack() },
+                    isLoginFlow = true,
+                    onLoginSuccess = {
+                        val signInError = auth.signInWithPassword(email, auth.pendingPassword)
+                        if (signInError == null) {
+                            nav.navigate(returnTo) { popUpTo("home") { inclusive = true } }
+                        }
+                        signInError
+                    }
                 )
             }
         }

@@ -138,7 +138,9 @@ fun EmailVerificationScreen(
     requestCode: suspend (String) -> EmailVerificationChallenge,
     verifyCode: suspend (String, String, String) -> Unit,
     continueToSignIn: () -> Unit,
-    back: () -> Unit
+    back: () -> Unit,
+    isLoginFlow: Boolean = false,
+    onLoginSuccess: suspend () -> String? = { null }
 ) {
     var challengeId by remember(email) { mutableStateOf(initialChallenge.challengeId) }
     var resendAfterSeconds by remember(email) { mutableIntStateOf(initialChallenge.resendAfterSeconds) }
@@ -165,7 +167,7 @@ fun EmailVerificationScreen(
             Text("Kilivana", style = MaterialTheme.typography.titleLarge, color = Green700)
         }
         Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 18.dp)) {
-            Text("Verify your email", style = MaterialTheme.typography.headlineMedium, color = TextPrimary)
+            Text(if (isLoginFlow) "Sign in verification" else "Verify your email", style = MaterialTheme.typography.headlineMedium, color = TextPrimary)
             Text("Enter the six-digit code sent to $email.", style = MaterialTheme.typography.bodyLarge, color = TextSecondary)
             Spacer(Modifier.height(18.dp))
             Surface(shape = RoundedCornerShape(20.dp), color = NeutralSurface, shadowElevation = 1.dp) {
@@ -187,7 +189,11 @@ fun EmailVerificationScreen(
                                 feedback = try {
                                     verifyCode(challengeId, email, code)
                                     verified = true
-                                    null
+                                    if (isLoginFlow) {
+                                        onLoginSuccess()
+                                    } else {
+                                        null
+                                    }
                                 } catch (error: Exception) {
                                     error.message ?: "Email verification failed."
                                 }
@@ -198,11 +204,11 @@ fun EmailVerificationScreen(
                         enabled = !submitting && !verified && code.length == 6
                     ) {
                         if (submitting) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
-                        else Text("Verify email")
+                        else Text(if (isLoginFlow) "Verify and sign in" else "Verify email")
                     }
                     if (verified) {
-                        Text("Email verified. Sign in to continue.", color = Green700)
-                        Button(onClick = continueToSignIn, modifier = Modifier.fillMaxWidth()) { Text("Continue to sign in") }
+                        Text(if (isLoginFlow) "Email verified and signed in successfully." else "Email verified. Sign in to continue.", color = Green700)
+                        Button(onClick = continueToSignIn, modifier = Modifier.fillMaxWidth()) { Text(if (isLoginFlow) "Continue" else "Continue to sign in") }
                     } else {
                         TextButton(
                             onClick = {

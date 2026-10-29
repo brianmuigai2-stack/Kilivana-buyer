@@ -190,8 +190,14 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
     val email: String? get() = repository.currentEmail()
     val phone: String? get() = repository.currentPhone()
     val accessToken: String? get() = repository.accessToken()
+    var pendingPassword: String = ""
     init { viewModelScope.launch { _loggedIn.value = repository.refreshSession() } }
     suspend fun signIn(email: String, password: String): String? {
+        val error = repository.signIn(email, password)
+        _loggedIn.value = repository.isLoggedIn()
+        return error
+    }
+    suspend fun signInWithPassword(email: String, password: String): String? {
         val error = repository.signIn(email, password)
         _loggedIn.value = repository.isLoggedIn()
         return error
